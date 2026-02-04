@@ -1,0 +1,102 @@
+{
+  "hotels": {
+    "josun_palace": {
+      "name": "조선 팰리스",
+      "code": "jpg",
+      "base_url": "https://jpg.josunhotel.com",
+      "contact": {
+        "phone": "02-727-7200",
+        "email": "rsvn@josunpalace.com"
+      },
+      "pages": {
+        "faq": "/about/faq.do",
+        "policy": "/policy/hotel.do",
+        "rooms": "/rooms/subMain.do",
+        "dining": "/dining/subMain.do",
+        "facilities": "/facilities/subMain.do"
+      }
+    },
+    "grand_josun_busan": {
+      "name": "그랜드 조선 부산",
+      "code": "gjb",
+      "base_url": "https://gjb.josunhotel.com",
+      "contact": {
+        "phone": "051-922-5000",
+        "email": "busan@grandjosun.com"
+      },
+      "pages": {
+        "faq": "/about/faq.do",
+        "policy": "/policy/hotel.do",
+        "rooms": "/rooms/subMain.do",
+        "dining": "/dining/subMain.do",
+        "facilities": "/facilities/subMain.do"
+      }
+    },
+    "grand_josun_jeju": {
+      "name": "그랜드 조선 제주",
+      "code": "gjj",
+      "base_url": "https://gjj.josunhotel.com",
+      "contact": {
+        "phone": "064-735-8000",
+        "email": "jeju@grandjosun.com"
+      },
+      "pages": {
+        "faq": "/about/faq.do",
+        "policy": "/policy/hotel.do",
+        "rooms": "/rooms/subMain.do",
+        "dining": "/dining/subMain.do",
+        "facilities": "/facilities/subMain.do"
+      }
+    },
+    "lescape": {
+      "name": "레스케이프",
+      "code": "les",
+      "base_url": "https://les.josunhotel.com",
+      "contact": {
+        "phone": "02-317-4000",
+        "email": "contact@lescapehotel.com"
+      },
+      "pages": {
+        "faq": "/about/faq.do",
+        "policy": "/policy/hotel.do",
+        "rooms": "/rooms/subMain.do",
+        "dining": "/dining/subMain.do",
+        "facilities": "/facilities/subMain.do"
+      }
+    },
+    "gravity_pangyo": {
+      "name": "그래비티 판교",
+      "code": "grp",
+      "base_url": "https://grp.josunhotel.com",
+      "contact": {
+        "phone": "031-539-4800",
+        "email": "reservation@gravityhotel.com"
+      },
+      "pages": {
+        "faq": "/about/faq.do",
+        "policy": "/policy/hotel.do",
+        "rooms": "/rooms/subMain.do",
+        "dining": "/dining/subMain.do",
+        "facilities": "/facilities/subMain.do"
+      }
+    }
+  },
+  "faq_categories": [
+    "전체",
+    "객실",
+    "예약",
+    "부대시설",
+    "식음",
+    "연회",
+    "웨딩",
+    "일반문의",
+    "멤버십",
+    "피트니스"
+  ],
+  "crawl_config": {
+    "request_delay": 1.0,
+    "max_retries": 3,
+    "timeout": 30,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+  }
+}
