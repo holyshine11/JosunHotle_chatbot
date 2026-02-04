@@ -27,6 +27,7 @@ class RAGState(TypedDict):
     detected_hotel: Optional[str]
     category: Optional[str]
     normalized_query: str
+    is_valid_query: bool  # 호텔 관련 질문인지 여부
 
     # 검색 결과
     retrieved_chunks: list[dict]
@@ -58,7 +59,34 @@ class RAGGraph:
     """LangGraph RAG 그래프"""
 
     # 근거 검증 임계값 (높을수록 엄격)
-    EVIDENCE_THRESHOLD = 0.65  # 최소 유사도 점수 (0.7 → 0.65로 조정)
+    EVIDENCE_THRESHOLD = 0.65  # 최소 유사도 점수 (질문 유효성 검사로 보완)
+
+    # 질문 유효성 검사용 키워드 (호텔 관련 질문인지 판단)
+    VALID_QUERY_KEYWORDS = [
+        # 시설
+        "체크인", "체크아웃", "check", "룸", "room", "객실", "스위트", "suite",
+        "수영", "풀", "pool", "피트니스", "헬스", "fitness", "gym", "사우나", "스파",
+        # 다이닝
+        "레스토랑", "restaurant", "식당", "조식", "breakfast", "뷔페", "buffet",
+        "다이닝", "dining", "식사", "아침", "점심", "저녁", "런치", "디너",
+        # 서비스
+        "주차", "parking", "발렛", "valet", "와이파이", "wifi", "인터넷",
+        "어메니티", "amenity", "세탁", "laundry", "룸서비스",
+        # 예약/정책
+        "예약", "reservation", "취소", "cancel", "환불", "refund", "가격", "price", "요금",
+        "정책", "policy", "규정", "이용",
+        # 위치/연락처
+        "위치", "location", "주소", "address", "전화", "phone", "연락", "contact",
+        "찾아가", "교통", "지하철", "버스",
+        # 기타 시설
+        "웨딩", "wedding", "연회", "banquet", "회의", "meeting", "비즈니스",
+        "키즈", "kids", "어린이", "반려", "pet", "강아지", "동물",
+        "아트", "art", "컬렉션", "collection", "전시", "갤러리", "gallery",
+        "라운지", "lounge", "바", "bar", "클럽", "club",
+        # 일반
+        "시간", "운영", "오픈", "영업", "몇시", "언제", "어디", "뭐", "무엇", "얼마", "how", "what", "where", "when",
+        "안내", "소개", "정보", "알려", "가능",
+    ]
     MIN_CHUNKS_REQUIRED = 1   # 최소 필요 청크 수
 
     # LLM 설정
@@ -181,12 +209,20 @@ class RAGGraph:
             if detectedCategory:
                 break
 
+        # 질문 유효성 검사 (호텔 관련 키워드 포함 여부)
+        isValidQuery = False
+        for keyword in self.VALID_QUERY_KEYWORDS:
+            if keyword.lower() in queryLower:
+                isValidQuery = True
+                break
+
         return {
             **state,
             "language": language,
             "detected_hotel": detectedHotel,
             "category": detectedCategory,
             "normalized_query": query,
+            "is_valid_query": isValidQuery,
         }
 
     def retrieveNode(self, state: RAGState) -> RAGState:
@@ -216,6 +252,15 @@ class RAGGraph:
         """근거 검증 노드: 검색 결과 품질 확인"""
         chunks = state["retrieved_chunks"]
         topScore = state["top_score"]
+        isValidQuery = state.get("is_valid_query", True)
+
+        # 질문 유효성 검사 (호텔 관련 키워드 없으면 실패)
+        if not isValidQuery:
+            return {
+                **state,
+                "evidence_passed": False,
+                "evidence_reason": "호텔 관련 질문이 아닙니다.",
+            }
 
         # 검증 조건
         hasEnoughChunks = len(chunks) >= self.MIN_CHUNKS_REQUIRED
@@ -557,6 +602,7 @@ class RAGGraph:
             "detected_hotel": None,
             "category": None,
             "normalized_query": "",
+            "is_valid_query": True,  # 기본값 True, preprocess에서 판단
             "retrieved_chunks": [],
             "top_score": 0.0,
             "evidence_passed": False,

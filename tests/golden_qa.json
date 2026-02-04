@@ -377,7 +377,7 @@
       "query": "부산 조선 아침식사 시간",
       "hotel": "grand_josun_busan",
       "category": "조식",
-      "expected_keywords": ["06:30", "10:00", "조식", "아침", "Breakfast"],
+      "expected_keywords": ["06:30", "10:00", "08:00", "조식", "아침", "Breakfast", "델리", "Deli"],
       "forbidden_keywords": ["제주"],
       "min_score": 0.65
     },
