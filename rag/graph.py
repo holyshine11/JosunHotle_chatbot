@@ -1,7 +1,8 @@
 """
 LangGraph 기반 RAG 플로우
 - No Retrieval, No Answer 정책 적용
-- 6개 노드: preprocess → retrieve → evidence_gate → answer_compose → policy_filter → log
+- 7개 노드: preprocess → retrieve → evidence_gate → answer_compose → answer_verify → policy_filter → log
+- 답변 검증으로 할루시네이션 방지
 - Ollama LLM (qwen2.5:7b)으로 자연어 답변 생성
 """
 
@@ -38,6 +39,11 @@ class RAGState(TypedDict):
     # 답변
     answer: str
     sources: list[str]
+
+    # 답변 검증
+    verification_passed: bool
+    verification_issues: list[str]
+    verified_answer: str
 
     # 정책 필터
     policy_passed: bool
@@ -113,6 +119,7 @@ class RAGGraph:
         workflow.add_node("retrieve", self.retrieveNode)
         workflow.add_node("evidence_gate", self.evidenceGateNode)
         workflow.add_node("answer_compose", self.answerComposeNode)
+        workflow.add_node("answer_verify", self.answerVerifyNode)  # 답변 검증 노드
         workflow.add_node("policy_filter", self.policyFilterNode)
         workflow.add_node("log", self.logNode)
 
@@ -131,7 +138,8 @@ class RAGGraph:
             }
         )
 
-        workflow.add_edge("answer_compose", "policy_filter")
+        workflow.add_edge("answer_compose", "answer_verify")  # 답변 → 검증
+        workflow.add_edge("answer_verify", "policy_filter")   # 검증 → 정책필터
         workflow.add_edge("policy_filter", "log")
         workflow.add_edge("log", END)
 
@@ -353,9 +361,121 @@ class RAGGraph:
             traceback.print_exc()
             return f"[시스템 오류] LLM 응답 실패. 검색된 정보: {context[:200]}..."
 
+    def _extractNumbers(self, text: str) -> set[str]:
+        """텍스트에서 숫자 정보 추출 (가격, 시간, 전화번호)"""
+        numbers = set()
+
+        # 가격 패턴: 1,000원, 50000원, 1,234,567원
+        prices = re.findall(r'[\d,]+\s*원', text)
+        numbers.update(prices)
+
+        # 시간 패턴: 15:00, 06:30, 오후 3시
+        times = re.findall(r'\d{1,2}:\d{2}', text)
+        numbers.update(times)
+
+        # 전화번호 패턴: 02-727-7200, 051-922-5000
+        phones = re.findall(r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', text)
+        numbers.update(phones)
+
+        # 퍼센트: 20%, 30%
+        percents = re.findall(r'\d+\s*%', text)
+        numbers.update(percents)
+
+        # 층수: 26층, 36층
+        floors = re.findall(r'\d+\s*층', text)
+        numbers.update(floors)
+
+        # 인원: 2인, 4인
+        persons = re.findall(r'\d+\s*인', text)
+        numbers.update(persons)
+
+        return numbers
+
+    def _checkHallucination(self, answer: str, context: str) -> tuple[bool, list[str]]:
+        """할루시네이션 검사: 답변의 숫자가 컨텍스트에 있는지 확인"""
+        issues = []
+
+        # 답변과 컨텍스트에서 숫자 추출
+        answerNumbers = self._extractNumbers(answer)
+        contextNumbers = self._extractNumbers(context)
+
+        # 의심 패턴 검사
+        suspiciousPatterns = [
+            (r'약\s*[\d,]+\s*원', "추정 가격"),
+            (r'대략\s*[\d,]+\s*원', "추정 가격"),
+            (r'보통\s*[\d,]+\s*원', "추정 가격"),
+            (r'평균\s*[\d,]+\s*원', "추정 가격"),
+            (r'예상\s*[\d,]+', "추정 숫자"),
+            (r'아마\s*\d+', "추측"),
+        ]
+
+        for pattern, issueType in suspiciousPatterns:
+            if re.search(pattern, answer):
+                issues.append(f"의심: {issueType} 발견")
+
+        # 답변에만 있고 컨텍스트에 없는 숫자 검사
+        for num in answerNumbers:
+            # 정규화 (공백, 쉼표 제거)
+            numNorm = re.sub(r'[\s,]', '', num)
+
+            # 컨텍스트에서 찾기
+            found = False
+            for ctxNum in contextNumbers:
+                ctxNorm = re.sub(r'[\s,]', '', ctxNum)
+                if numNorm in ctxNorm or ctxNorm in numNorm:
+                    found = True
+                    break
+
+            # 일반적인 숫자는 제외 (1, 2, 3 등)
+            if not found and len(numNorm) > 2:
+                # 컨텍스트 원문에서도 검색
+                if numNorm not in context.replace(',', '').replace(' ', ''):
+                    issues.append(f"검증실패: '{num}' - 컨텍스트에 없음")
+
+        return len(issues) == 0, issues
+
+    def answerVerifyNode(self, state: RAGState) -> RAGState:
+        """답변 검증 노드: 할루시네이션 탐지 및 수정"""
+        answer = state.get("answer", "")
+        chunks = state.get("retrieved_chunks", [])
+        hotel = state.get("detected_hotel")
+
+        # 컨텍스트 구성
+        context = "\n".join([chunk["text"] for chunk in chunks[:5]])
+
+        # 할루시네이션 검사
+        passed, issues = self._checkHallucination(answer, context)
+
+        # 검증 실패 시 답변 수정
+        verifiedAnswer = answer
+        if not passed and issues:
+            # 호텔 연락처 정보
+            hotelInfo = self.HOTEL_INFO.get(hotel, {})
+            hotelName = hotelInfo.get("name", "")
+            hotelPhone = hotelInfo.get("phone", "")
+            contactGuide = f"{hotelName} ({hotelPhone})" if hotelPhone else "호텔 고객센터"
+
+            # 심각한 할루시네이션인 경우 (추정 가격 등)
+            hasSeriousIssue = any("추정" in i or "추측" in i for i in issues)
+
+            if hasSeriousIssue:
+                # 답변 전체 교체
+                verifiedAnswer = f"정확한 정보 확인을 위해 {contactGuide}로 문의 부탁드립니다."
+            else:
+                # 경미한 경우 경고 추가
+                verifiedAnswer = answer + f"\n\n※ 정확한 정보는 {contactGuide}에서 확인해주세요."
+
+        return {
+            **state,
+            "verification_passed": passed,
+            "verification_issues": issues,
+            "verified_answer": verifiedAnswer,
+        }
+
     def policyFilterNode(self, state: RAGState) -> RAGState:
         """정책 필터 노드: 금지 주제 및 개인정보 필터링"""
-        answer = state.get("answer", "")
+        # 검증된 답변 사용 (없으면 원본 답변)
+        answer = state.get("verified_answer") or state.get("answer", "")
         query = state["query"]
         hotel = state.get("detected_hotel")
 
@@ -415,6 +535,8 @@ class RAGGraph:
             "hotel": state.get("detected_hotel"),
             "category": state.get("category"),
             "evidence_passed": bool(state["evidence_passed"]),
+            "verification_passed": bool(state.get("verification_passed", True)),
+            "verification_issues": state.get("verification_issues", []),
             "top_score": float(state["top_score"]),
             "chunks_count": len(state["retrieved_chunks"]),
             "final_answer": state["final_answer"],
@@ -445,6 +567,9 @@ class RAGGraph:
             "evidence_reason": "",
             "answer": "",
             "sources": [],
+            "verification_passed": True,
+            "verification_issues": [],
+            "verified_answer": "",
             "policy_passed": False,
             "policy_reason": "",
             "final_answer": "",
@@ -459,6 +584,7 @@ class RAGGraph:
             "hotel": result["detected_hotel"],
             "category": result["category"],
             "evidence_passed": result["evidence_passed"],
+            "verification_passed": result.get("verification_passed", True),
             "sources": result["sources"],
             "score": result["top_score"],
         }
