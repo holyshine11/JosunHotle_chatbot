@@ -63,29 +63,122 @@ class RAGGraph:
 
     # 질문 유효성 검사용 키워드 (호텔 관련 질문인지 판단)
     VALID_QUERY_KEYWORDS = [
-        # 시설
-        "체크인", "체크아웃", "check", "룸", "room", "객실", "스위트", "suite",
-        "수영", "풀", "pool", "피트니스", "헬스", "fitness", "gym", "사우나", "스파",
-        # 다이닝
-        "레스토랑", "restaurant", "식당", "조식", "breakfast", "뷔페", "buffet",
-        "다이닝", "dining", "식사", "아침", "점심", "저녁", "런치", "디너",
-        # 서비스
-        "주차", "parking", "발렛", "valet", "와이파이", "wifi", "인터넷",
-        "어메니티", "amenity", "세탁", "laundry", "룸서비스",
-        # 예약/정책
-        "예약", "reservation", "취소", "cancel", "환불", "refund", "가격", "price", "요금",
-        "정책", "policy", "규정", "이용",
-        # 위치/연락처
-        "위치", "location", "주소", "address", "전화", "phone", "연락", "contact",
-        "찾아가", "교통", "지하철", "버스",
-        # 기타 시설
-        "웨딩", "wedding", "연회", "banquet", "회의", "meeting", "비즈니스",
-        "키즈", "kids", "어린이", "반려", "pet", "강아지", "동물",
-        "아트", "art", "컬렉션", "collection", "전시", "갤러리", "gallery",
-        "라운지", "lounge", "바", "bar", "클럽", "club",
-        # 일반
-        "시간", "운영", "오픈", "영업", "몇시", "언제", "어디", "뭐", "무엇", "얼마", "how", "what", "where", "when",
-        "안내", "소개", "정보", "알려", "가능",
+        # === 객실 관련 ===
+        "체크인", "체크아웃", "check-in", "check-out", "checkout", "checkin",
+        "룸", "room", "객실", "방", "스위트", "suite", "디럭스", "deluxe", "프리미어", "premier",
+        "슈페리어", "superior", "스탠다드", "standard", "스테이트", "state", "마스터", "master",
+        "침대", "베드", "bed", "싱글", "single", "더블", "double", "트윈", "twin", "킹", "king", "퀸", "queen",
+        "뷰", "view", "전망", "오션", "ocean", "시티", "city", "마운틴", "mountain", "가든", "garden",
+        "금연", "흡연", "smoking", "non-smoking", "nonsmoking",
+        "연결", "커넥팅", "connecting", "어드조인", "adjoining",
+        "인원", "추가", "엑스트라", "extra", "베이비", "baby", "유아", "크립", "crib", "요람",
+
+        # === 시설/부대시설 ===
+        "수영", "수영장", "풀", "pool", "swimming", "워터", "water", "자쿠지", "jacuzzi",
+        "피트니스", "헬스", "헬스장", "fitness", "gym", "운동", "체육", "트레이닝",
+        "사우나", "sauna", "찜질", "한증", "스팀", "steam",
+        "스파", "spa", "마사지", "massage", "테라피", "therapy", "트리트먼트", "treatment",
+        "라운지", "lounge", "로비", "lobby", "대기",
+        "비즈니스", "business", "센터", "center", "회의", "회의실", "미팅", "meeting", "컨퍼런스", "conference",
+        "연회", "연회장", "banquet", "볼룸", "ballroom", "홀", "hall",
+        "웨딩", "wedding", "결혼", "예식", "신부", "신랑", "웨딩홀",
+        "키즈", "kids", "어린이", "아이", "놀이", "키즈클럽", "키즈룸", "놀이방", "게임",
+        "아트", "art", "컬렉션", "collection", "전시", "갤러리", "gallery", "작품",
+        "도서", "라이브러리", "library", "북",
+        "클럽", "club", "멤버", "member", "회원",
+        "테라스", "terrace", "발코니", "balcony", "루프탑", "rooftop", "옥상",
+        "정원", "가든", "garden", "조경",
+
+        # === 다이닝/식음료 ===
+        "레스토랑", "restaurant", "식당", "음식점",
+        "조식", "breakfast", "아침", "모닝", "morning",
+        "중식", "lunch", "점심", "런치",
+        "석식", "dinner", "저녁", "디너",
+        "뷔페", "buffet", "부페",
+        "다이닝", "dining", "식사", "밥", "먹",
+        "바", "bar", "주류", "술", "와인", "wine", "칵테일", "cocktail", "맥주", "beer",
+        "카페", "cafe", "커피", "coffee", "티", "tea", "베이커리", "bakery", "디저트", "dessert",
+        "룸서비스", "room service", "인룸", "in-room",
+        "델리", "deli", "테이크아웃", "takeout", "포장",
+        "중식당", "일식", "한식", "양식", "이탈리안", "프렌치", "차이니즈", "chinese", "일본", "japanese", "korean",
+        "미슐랭", "michelin", "파인다이닝", "fine dining",
+        "아리아", "aria", "콘스탄스", "constans", "홍연", "팔레", "palais",
+
+        # === 서비스 ===
+        "주차", "parking", "발렛", "valet", "파킹", "셀프", "self",
+        "와이파이", "wifi", "wi-fi", "인터넷", "internet", "무선",
+        "어메니티", "amenity", "amenities", "비품", "용품", "칫솔", "치약", "샴푸", "린스", "바디워시",
+        "세탁", "laundry", "드라이", "dry", "클리닝", "cleaning", "다림", "iron",
+        "컨시어지", "concierge", "안내", "도움",
+        "벨", "bell", "포터", "porter", "짐", "수하물", "luggage", "baggage", "보관",
+        "픽업", "pickup", "드롭", "drop", "셔틀", "shuttle", "리무진", "limousine", "공항",
+        "환전", "exchange", "외화",
+        "모닝콜", "wake-up", "wakeup", "알람",
+        "턴다운", "turndown", "turn-down",
+        "미니바", "minibar", "mini-bar", "냉장고",
+        "금고", "safe", "세이프", "귀중품",
+        "슬리퍼", "가운", "robe", "타월", "towel",
+
+        # === 예약/정책/결제 ===
+        "예약", "reservation", "booking", "부킹",
+        "취소", "cancel", "cancellation", "변경", "modify", "수정",
+        "환불", "refund", "위약", "패널티", "penalty", "노쇼", "no-show", "noshow",
+        "가격", "price", "요금", "비용", "cost", "금액", "원", "달러", "dollar",
+        "결제", "payment", "카드", "card", "현금", "cash", "계좌", "이체",
+        "정책", "policy", "규정", "약관", "조건", "terms",
+        "보증", "guarantee", "deposit", "디파짓", "선결제", "후결제",
+        "할인", "discount", "프로모션", "promotion", "이벤트", "event", "특가", "패키지", "package",
+        "멤버십", "membership", "포인트", "point", "적립", "마일리지", "mileage",
+        "쿠폰", "coupon", "바우처", "voucher", "상품권", "기프트", "gift",
+        "영수증", "receipt", "인보이스", "invoice", "세금계산서",
+
+        # === 위치/교통/연락처 ===
+        "위치", "location", "어디", "어딨", "장소",
+        "주소", "address", "도로명", "지번",
+        "찾아가", "오시는", "가는", "길",
+        "교통", "대중교통", "transportation",
+        "지하철", "subway", "metro", "역",
+        "버스", "bus", "정류장",
+        "택시", "taxi", "콜택시",
+        "네비", "내비", "네비게이션", "navigation",
+        "전화", "phone", "연락", "contact", "번호", "tel", "문의",
+        "이메일", "email", "e-mail", "메일",
+        "팩스", "fax",
+
+        # === 고객 유형 ===
+        "반려", "pet", "펫", "강아지", "개", "고양이", "동물", "애완",
+        "장애", "disabled", "휠체어", "wheelchair", "배리어프리", "barrier-free",
+        "노약자", "어르신", "시니어", "senior",
+        "임산부", "pregnant", "산모",
+        "외국인", "foreigner", "영어", "english", "일본어", "japanese", "중국어", "chinese",
+
+        # === 특수 서비스 ===
+        "생일", "birthday", "기념일", "anniversary", "프로포즈", "propose", "허니문", "honeymoon",
+        "케이크", "cake", "꽃", "flower", "풍선", "balloon", "장식", "decoration",
+        "촬영", "photo", "사진", "포토",
+        "의료", "medical", "약국", "pharmacy", "병원", "hospital", "응급",
+
+        # === 일반 질문 패턴 ===
+        "시간", "운영", "오픈", "open", "클로즈", "close", "영업", "휴무", "휴관", "휴일",
+        "몇시", "언제", "when", "몇분", "얼마나",
+        "어디", "where", "어느",
+        "뭐", "무엇", "what", "뭔가", "어떤", "which",
+        "얼마", "how much", "비싸", "싼", "저렴",
+        "있", "없", "되", "안되", "가능", "불가", "허용", "금지",
+        "포함", "include", "제외", "exclude", "별도", "추가",
+        "무료", "free", "유료", "paid", "공짜",
+        "최대", "최소", "max", "min", "제한", "limit",
+        "추천", "recommend", "베스트", "best", "인기", "popular",
+        "안내", "소개", "정보", "info", "알려", "설명",
+        "문의", "질문", "ask", "question",
+
+        # === 호텔 브랜드/이름 ===
+        "조선", "josun", "팰리스", "palace", "그랜드", "grand",
+        "레스케이프", "lescape", "l'escape",
+        "그래비티", "gravity", "판교", "pangyo",
+        "부산", "busan", "해운대",
+        "제주", "jeju",
+        "호텔", "hotel", "리조트", "resort", "숙소", "숙박", "투숙",
     ]
     MIN_CHUNKS_REQUIRED = 1   # 최소 필요 청크 수
 

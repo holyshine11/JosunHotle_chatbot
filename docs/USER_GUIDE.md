@@ -26,7 +26,7 @@ git status
 
 # Step 2: 변경된 파일 스테이징 (추가)
 git add 파일명              # 특정 파일만
-git add .                   # 모든 변경 파일
+git add .                 # 모든 변경 파일
 
 # Step 3: 커밋 메시지 작성
 git commit -m "커밋 메시지"
