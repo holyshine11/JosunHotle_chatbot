@@ -414,8 +414,8 @@ class RAGGraph:
             "query": state["query"],
             "hotel": state.get("detected_hotel"),
             "category": state.get("category"),
-            "evidence_passed": state["evidence_passed"],
-            "top_score": state["top_score"],
+            "evidence_passed": bool(state["evidence_passed"]),
+            "top_score": float(state["top_score"]),
             "chunks_count": len(state["retrieved_chunks"]),
             "final_answer": state["final_answer"],
         }

@@ -1,16 +1,29 @@
 """
 Vector DB 인덱싱 모듈
 - Chroma DB에 청크 데이터 임베딩 및 저장
+- BM25 + Vector 하이브리드 검색 지원
 - 다국어 임베딩 모델 사용 (한/영/일 지원)
 """
 
 import json
+import re
+import pickle
 from pathlib import Path
 from typing import Optional
 
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from rank_bm25 import BM25Okapi
+
+
+def tokenizeKorean(text: str) -> list[str]:
+    """한국어 토크나이저 (간단한 형태소 분리)"""
+    # 특수문자 제거 및 공백 기준 분리
+    text = re.sub(r'[^\w\s가-힣a-zA-Z0-9]', ' ', text)
+    tokens = text.lower().split()
+    # 최소 길이 필터링
+    return [t for t in tokens if len(t) >= 2]
 
 
 class Indexer:
@@ -43,6 +56,61 @@ class Indexer:
             name="josun_hotels",
             metadata={"description": "조선호텔 FAQ/정책 청크"}
         )
+
+        # BM25 인덱스 초기화
+        self.bm25Index = None
+        self.bm25Docs = []  # 원본 문서 저장
+        self.bm25Path = self.indexPath / "bm25_index.pkl"
+        self._loadBM25Index()
+
+    def _loadBM25Index(self):
+        """BM25 인덱스 로드"""
+        if self.bm25Path.exists():
+            try:
+                with open(self.bm25Path, "rb") as f:
+                    data = pickle.load(f)
+                    self.bm25Index = data.get("index")
+                    self.bm25Docs = data.get("docs", [])
+                print(f"[BM25] 인덱스 로드 완료 ({len(self.bm25Docs)}개 문서)")
+            except Exception as e:
+                print(f"[BM25] 인덱스 로드 실패: {e}")
+                self.bm25Index = None
+                self.bm25Docs = []
+
+    def _saveBM25Index(self):
+        """BM25 인덱스 저장"""
+        if self.bm25Index and self.bm25Docs:
+            with open(self.bm25Path, "wb") as f:
+                pickle.dump({
+                    "index": self.bm25Index,
+                    "docs": self.bm25Docs
+                }, f)
+            print(f"[BM25] 인덱스 저장 완료")
+
+    def _buildBM25Index(self, chunks: list[dict]):
+        """BM25 인덱스 구축"""
+        print("[BM25] 인덱스 구축 중...")
+
+        # 문서 저장 (chunk_id, text, metadata)
+        self.bm25Docs = []
+        tokenizedCorpus = []
+
+        for chunk in chunks:
+            text = chunk["chunk_text"]
+            tokens = tokenizeKorean(text)
+
+            self.bm25Docs.append({
+                "chunk_id": chunk["chunk_id"],
+                "text": text,
+                "metadata": self._prepareMetadata(chunk),
+                "tokens": tokens
+            })
+            tokenizedCorpus.append(tokens)
+
+        # BM25 인덱스 생성
+        self.bm25Index = BM25Okapi(tokenizedCorpus)
+        self._saveBM25Index()
+        print(f"[BM25] 인덱스 구축 완료 ({len(self.bm25Docs)}개 문서)")
 
     def _prepareText(self, chunk: dict) -> str:
         """임베딩용 텍스트 준비 (E5 모델용 prefix 추가)"""
@@ -84,14 +152,14 @@ class Indexer:
         return chunks
 
     def indexChunks(self, chunks: list[dict], batchSize: int = 50):
-        """청크 인덱싱"""
+        """청크 인덱싱 (Vector + BM25)"""
         if not chunks:
             print("[오류] 인덱싱할 청크 없음")
             return
 
         print(f"\n[인덱싱 시작] {len(chunks)}개 청크")
 
-        # 배치 처리
+        # 1. Vector 인덱싱 (Chroma)
         for i in range(0, len(chunks), batchSize):
             batch = chunks[i:i + batchSize]
 
@@ -113,6 +181,9 @@ class Indexer:
 
             print(f"  -> {i + len(batch)}/{len(chunks)} 완료")
 
+        # 2. BM25 인덱싱
+        self._buildBM25Index(chunks)
+
         print(f"\n[인덱싱 완료] 총 {self.collection.count()}개 문서")
 
     def deleteHotel(self, hotelKey: str):
@@ -122,14 +193,14 @@ class Indexer:
         )
         print(f"[삭제 완료] {hotelKey}")
 
-    def search(
+    def searchVector(
         self,
         query: str,
         hotel: str = None,
         category: str = None,
         topK: int = 5
     ) -> list[dict]:
-        """벡터 검색"""
+        """벡터 검색 (Semantic)"""
         # E5 모델용 query prefix
         if "e5" in self.modelName.lower():
             queryText = f"query: {query}"
@@ -165,10 +236,150 @@ class Indexer:
                     "text": results["documents"][0][i],
                     "metadata": results["metadatas"][0][i],
                     "distance": results["distances"][0][i],
-                    "score": 1 - results["distances"][0][i]  # 유사도 점수 (0~1)
+                    "score": 1 - results["distances"][0][i],  # 유사도 점수 (0~1)
+                    "source": "vector"
                 })
 
         return searchResults
+
+    def searchBM25(
+        self,
+        query: str,
+        hotel: str = None,
+        topK: int = 5
+    ) -> list[dict]:
+        """BM25 키워드 검색"""
+        if not self.bm25Index or not self.bm25Docs:
+            return []
+
+        # 쿼리 토크나이징
+        queryTokens = tokenizeKorean(query)
+        if not queryTokens:
+            return []
+
+        # BM25 점수 계산
+        scores = self.bm25Index.get_scores(queryTokens)
+
+        # 호텔 필터링 및 정렬
+        scoredDocs = []
+        for i, score in enumerate(scores):
+            doc = self.bm25Docs[i]
+            # 호텔 필터
+            if hotel and doc["metadata"].get("hotel") != hotel:
+                continue
+            if score > 0:
+                scoredDocs.append((i, score))
+
+        # 점수 기준 정렬
+        scoredDocs.sort(key=lambda x: x[1], reverse=True)
+
+        # 상위 K개 결과
+        results = []
+        maxScore = scoredDocs[0][1] if scoredDocs else 1.0
+
+        for i, (docIdx, score) in enumerate(scoredDocs[:topK]):
+            doc = self.bm25Docs[docIdx]
+            # BM25 점수 정규화 (0~1)
+            normalizedScore = score / maxScore if maxScore > 0 else 0
+
+            results.append({
+                "chunk_id": doc["chunk_id"],
+                "text": doc["text"],
+                "metadata": doc["metadata"],
+                "score": normalizedScore,
+                "bm25_raw": score,
+                "source": "bm25"
+            })
+
+        return results
+
+    def search(
+        self,
+        query: str,
+        hotel: str = None,
+        category: str = None,
+        topK: int = 5,
+        hybrid: bool = True,
+        vectorWeight: float = 0.7,
+        bm25Weight: float = 0.3
+    ) -> list[dict]:
+        """하이브리드 검색 (Vector + BM25)
+
+        Vector 검색을 기본으로 하고, BM25로 키워드 매칭 보완.
+        최종 점수는 Vector 점수 기준으로 유지하여 임계값 통과.
+
+        Args:
+            hybrid: True면 하이브리드, False면 벡터만
+            vectorWeight: 벡터 검색 가중치 (기본 0.7)
+            bm25Weight: BM25 검색 가중치 (기본 0.3)
+        """
+        # 벡터 검색
+        vectorResults = self.searchVector(query, hotel, category, topK=topK * 2)
+
+        if not hybrid or not self.bm25Index:
+            return vectorResults[:topK]
+
+        # BM25 검색
+        bm25Results = self.searchBM25(query, hotel, topK=topK * 2)
+
+        # 결과 수집
+        allResults = {}
+        for r in vectorResults:
+            allResults[r["chunk_id"]] = {
+                "result": r,
+                "vector_score": r["score"],
+                "vector_rank": vectorResults.index(r),
+                "bm25_score": 0,
+                "bm25_rank": 999
+            }
+
+        for rank, r in enumerate(bm25Results):
+            chunkId = r["chunk_id"]
+            if chunkId in allResults:
+                allResults[chunkId]["bm25_score"] = r["score"]
+                allResults[chunkId]["bm25_rank"] = rank
+            else:
+                allResults[chunkId] = {
+                    "result": r,
+                    "vector_score": 0,
+                    "vector_rank": 999,
+                    "bm25_score": r["score"],
+                    "bm25_rank": rank
+                }
+
+        # 최종 점수 계산: 벡터 점수 기반 + BM25 순위 부스트
+        for chunkId, data in allResults.items():
+            vectorScore = data["vector_score"]
+            bm25Score = data["bm25_score"]
+
+            # 벡터 점수를 기준으로 하되, BM25 상위 결과에 보너스
+            bm25Boost = 0
+            if data["bm25_rank"] < 5:  # BM25 상위 5개
+                bm25Boost = 0.05 * (5 - data["bm25_rank"]) / 5  # 최대 +0.05
+
+            # 최종 점수 = 벡터 점수 + BM25 부스트 (최대 1.0)
+            finalScore = min(vectorScore + bm25Boost, 1.0)
+
+            # 벡터 결과가 없는 경우 BM25 점수 사용 (패널티 적용)
+            if vectorScore == 0:
+                finalScore = bm25Score * 0.7  # BM25 전용 결과는 30% 패널티
+
+            data["final_score"] = finalScore
+
+        # 최종 점수 기준 정렬
+        sortedItems = sorted(allResults.items(), key=lambda x: x[1]["final_score"], reverse=True)
+
+        # 결과 반환
+        finalResults = []
+        for chunkId, data in sortedItems[:topK]:
+            result = data["result"].copy()
+            result["score"] = data["final_score"]
+            result["hybrid"] = True
+            result["vector_score"] = data["vector_score"]
+            result["bm25_score"] = data["bm25_score"]
+            finalResults.append(result)
+
+        return finalResults
 
     def getStats(self) -> dict:
         """인덱스 통계"""
