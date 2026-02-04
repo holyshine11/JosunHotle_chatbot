@@ -119,12 +119,43 @@ class DeepCrawledProcessor:
         """다이닝 정보를 텍스트로 변환"""
         parts = []
 
-        name = item.get("name", "")
         hotelName = item.get("hotel_name", "")
-        category = item.get("category", "")
+        title = item.get("title", "")
+        content = item.get("content", "")
+        url = item.get("url", "")
 
-        if name:
-            parts.append(f"{hotelName} {name} ({category})")
+        # 레스토랑명 추출 (title에서 또는 content에서)
+        restaurantName = ""
+        if title:
+            # "다이닝 - 아리아(Aria) | 그랜드 조선 부산" -> "아리아(Aria)"
+            import re
+            match = re.search(r'다이닝\s*[-–]\s*([^|]+)', title)
+            if match:
+                restaurantName = match.group(1).strip()
+            elif "subMain" not in url:
+                restaurantName = title.split("|")[0].strip()
+
+        # 레스토랑 목록 페이지 (subMain.do)
+        if "subMain" in url:
+            parts.append(f"{hotelName} 레스토랑 안내")
+            if content:
+                # 레스토랑 목록 추출
+                lines = content.split("\n")
+                restaurants = []
+                for line in lines:
+                    line = line.strip()
+                    if any(kw in line for kw in ["자세히보기", "다이닝예약"]):
+                        continue
+                    if len(line) > 5 and len(line) < 100:
+                        restaurants.append(line)
+                if restaurants[:10]:
+                    parts.append("레스토랑 목록:\n" + "\n".join([f"- {r}" for r in restaurants[:10]]))
+        else:
+            # 개별 레스토랑 상세
+            if restaurantName:
+                parts.append(f"{hotelName} 레스토랑: {restaurantName}")
+            else:
+                parts.append(f"{hotelName} 레스토랑")
 
         # 기본 정보
         info = item.get("info", {})
@@ -132,12 +163,16 @@ class DeepCrawledProcessor:
             infoText = []
             keyMap = {
                 "LOCATION": "위치",
-                "INQUIRY": "문의",
+                "INQUIRY": "문의/예약",
                 "CAPACITY": "좌석 수",
                 "DRESS CODE": "드레스 코드",
-                "HOURS": "운영시간"
+                "HOURS OF OPERATION": "운영시간",
+                "HOURS": "운영시간",
+                "MENU": "메뉴"
             }
             for key, val in info.items():
+                if key == "MENU" and "자세히" in val:
+                    continue  # 메뉴 링크는 제외
                 korKey = keyMap.get(key, key)
                 infoText.append(f"- {korKey}: {val}")
             if infoText:
@@ -145,13 +180,19 @@ class DeepCrawledProcessor:
 
         # 운영시간
         hours = item.get("hours", "")
-        if hours and "HOURS" not in info:
-            parts.append(f"운영시간: {hours}")
+        if hours and "HOURS" not in str(info):
+            parts.append(f"- 운영시간: {hours}")
 
-        # 설명
-        desc = item.get("description", "")
-        if desc:
-            parts.append(desc)
+        # 설명 (content에서 추출)
+        if content and "subMain" not in url:
+            # 첫 2-3문장 추출
+            sentences = content.split(".")[:3]
+            desc = ". ".join(sentences).strip()
+            if desc and len(desc) > 30:
+                desc = self._cleanText(desc)
+                if len(desc) > 300:
+                    desc = desc[:300] + "..."
+                parts.append(f"\n{desc}")
 
         return "\n\n".join(parts)
 
