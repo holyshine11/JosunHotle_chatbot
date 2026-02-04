@@ -306,14 +306,19 @@ class DeepCrawledProcessor:
         """모든 deep_crawled 파일 처리"""
         allChunks = []
 
-        # _deep.json 파일
-        deepFiles = list(self.deepPath.glob("*_deep.json"))
+        # _complete.json 파일 (완전 크롤링) - 우선 사용
+        completeFiles = list(self.deepPath.glob("*_complete.json"))
+
+        # _complete.json이 없으면 _deep.json 사용
+        if not completeFiles:
+            completeFiles = list(self.deepPath.glob("*_deep.json"))
+
         # MCP 크롤링 파일 (rooms, dining, facilities)
         mcpFiles = list(self.deepPath.glob("*_rooms.json"))
         mcpFiles += list(self.deepPath.glob("*_dining.json"))
         mcpFiles += list(self.deepPath.glob("*_facilities.json"))
 
-        allFiles = deepFiles + mcpFiles
+        allFiles = completeFiles + mcpFiles
         print(f"[심층 크롤링 데이터 처리] {len(allFiles)}개 파일")
 
         for filepath in allFiles:
