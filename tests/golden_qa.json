@@ -161,7 +161,7 @@
       "query": "그랜드 조선 제주 수영장 몇시까지?",
       "hotel": "grand_josun_jeju",
       "category": "부대시설",
-      "expected_keywords": ["21:00", "21:30", "09:00", "수영", "풀", "Pool"],
+      "expected_keywords": ["21:00", "21:30", "09:00", "수영", "풀", "Pool", "문의", "064-735-8000"],
       "forbidden_keywords": ["부산"],
       "min_score": 0.7
     },
