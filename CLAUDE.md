@@ -72,6 +72,8 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 | 3 | 답변 검증 노드 | `40fdb2f` | 91.7% |
 | 4 | 데이터 품질 개선 | `f2e3054` | **100%** |
 | 5 | 모니터링 시스템 | `e90a1ce` | ✅ |
+| 6 | 프롬프트 개선 | `316a6a7` | ✅ |
+| 7 | 쿼리 검증 강화 | `3e26f3f` | **100%** |
 
 ### 주요 구현 내용
 
@@ -95,6 +97,16 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
    - CLI 대시보드 (`dashboard.py`)
    - 로그 분석기 (`analyzer.py`)
    - 실패 케이스 수집기 (`collector.py`)
+
+6. **LLM 프롬프트 개선** (`rag/graph.py:answerComposeNode`)
+   - 불필요한 후속 질문 제거 ("궁금하신가요?" 등 금지)
+   - Temperature 0.1로 낮춤 (일관된 응답)
+   - 절대 금지 규칙 명시
+
+7. **쿼리 검증 강화** (`rag/graph.py:VALID_QUERY_KEYWORDS`)
+   - 586개 호텔 관련 키워드 정의
+   - 무관한 질문 차단 ("복실이 이쁘니?" 등)
+   - EVIDENCE_THRESHOLD: 0.65
 
 ### 자주 사용하는 명령어
 
