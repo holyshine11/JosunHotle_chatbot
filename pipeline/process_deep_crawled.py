@@ -209,12 +209,73 @@ class DeepCrawledProcessor:
 
         return "\n\n".join(parts)
 
+    def _extractServiceInfo(self, content: str, hotelName: str) -> list[str]:
+        """콘텐츠에서 서비스 정보 (조식, 피트니스 등) 추출"""
+        import re
+        extraChunks = []
+
+        # 조식/LA MAISON BOUTIQUE 정보 추출
+        breakfastPatterns = [
+            r'(LA MAISON BOUTIQUE[^\.]*?Breakfast[^\.]*?\d{2}:\d{2}[^\.]*)',
+            r'(조식[^\.]*?\d{2}:\d{2}[^\.]*)',
+            r'(Breakfast\s*\d{2}:\d{2}\s*[-–]\s*\d{2}:\d{2})',
+        ]
+        for pattern in breakfastPatterns:
+            match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
+            if match:
+                text = match.group(1).strip()
+                # 더 완전한 정보 추출
+                startIdx = content.find("LA MAISON BOUTIQUE")
+                if startIdx >= 0:
+                    endIdx = content.find("FITNESS", startIdx)
+                    if endIdx < 0:
+                        endIdx = startIdx + 500
+                    serviceText = content[startIdx:endIdx].strip()
+                    if serviceText and len(serviceText) > 50:
+                        extraChunks.append(f"{hotelName} 조식 안내\n\n{serviceText}")
+                break
+
+        # 피트니스 정보 추출
+        fitnessMatch = re.search(r'(FITNESS[^\.]*?24\s*Hours|FITNESS[^\.]*?\d{2}:\d{2}[^\.]*)', content, re.IGNORECASE)
+        if fitnessMatch:
+            startIdx = content.find("FITNESS")
+            if startIdx >= 0:
+                endIdx = min(startIdx + 300, len(content))
+                fitnessText = content[startIdx:endIdx].strip()
+                if fitnessText and len(fitnessText) > 30:
+                    extraChunks.append(f"{hotelName} 피트니스 안내\n\n{fitnessText}")
+
+        return extraChunks
+
     def processItem(self, item: dict, hotel: str, idx: int) -> list[Chunk]:
         """개별 아이템을 청크로 변환"""
         chunks = []
 
         itemType = item.get("type", item.get("section", "general"))
         section = item.get("section", itemType)
+        hotelName = item.get("hotel_name", "")
+        content = item.get("content", "")
+
+        # 콘텐츠에서 서비스 정보 추출 (조식, 피트니스 등)
+        if content:
+            extraTexts = self._extractServiceInfo(content, hotelName)
+            for extraIdx, extraText in enumerate(extraTexts):
+                extraDocId = f"{hotel}_{section}_{idx:03d}_svc{extraIdx}"
+                extraChunk = Chunk(
+                    chunk_id=f"{extraDocId}_c000",
+                    doc_id=extraDocId,
+                    hotel=hotel,
+                    hotel_name=hotelName,
+                    page_type="service",
+                    url=item.get("url", ""),
+                    category="서비스",
+                    language="ko",
+                    updated_at=item.get("crawled_at", datetime.now().isoformat()),
+                    chunk_index=0,
+                    chunk_text=extraText,
+                    metadata={"name": item.get("name", ""), "type": "service_info"}
+                )
+                chunks.append(extraChunk)
 
         # 타입별 텍스트 생성
         if itemType == "room":

@@ -52,7 +52,7 @@ class RAGGraph:
     """LangGraph RAG 그래프"""
 
     # 근거 검증 임계값 (높을수록 엄격)
-    EVIDENCE_THRESHOLD = 0.7  # 최소 유사도 점수 (0.5 → 0.7로 상향)
+    EVIDENCE_THRESHOLD = 0.65  # 최소 유사도 점수 (0.7 → 0.65로 조정)
     MIN_CHUNKS_REQUIRED = 1   # 최소 필요 청크 수
 
     # LLM 설정
