@@ -288,6 +288,95 @@ class DeepCrawledProcessor:
 
         return extraChunks
 
+    def _extractCheckinInfo(self, content: str, hotelName: str) -> list[str]:
+        """체크인/체크아웃 정보 추출"""
+        import re
+        extraChunks = []
+
+        # 체크인 패턴들
+        patterns = [
+            # "체크인은 15:00, 체크아웃은 11:00입니다"
+            r'체크인[은는]?\s*(\d{1,2}[:시]\d{0,2})[^체]*체크아웃[은는]?\s*(\d{1,2}[:시]\d{0,2})',
+            # "체크인 오후 3시 이후, 체크아웃 오전 11시"
+            r'체크인\s*(오[전후]\s*\d{1,2}시[^,]*)[,\s]*체크아웃\s*(오[전후]\s*\d{1,2}시)',
+            # "체크인 15시부터, 체크아웃 11시"
+            r'체크인[은는]?\s*(\d{1,2}시)[^체]*체크아웃[은는]?\s*(\d{1,2}시)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                checkin = match.group(1).strip()
+                checkout = match.group(2).strip()
+
+                # 시간 정규화
+                checkin = checkin.replace("시", ":00").replace(":00:00", ":00")
+                checkout = checkout.replace("시", ":00").replace(":00:00", ":00")
+
+                # 오전/오후 변환
+                if "오후 3" in checkin or "오후 15" in checkin:
+                    checkin = "15:00"
+                elif "15" in checkin:
+                    checkin = "15:00"
+
+                if "오전 11" in checkout:
+                    checkout = "11:00"
+                elif "11" in checkout:
+                    checkout = "11:00"
+                elif "12" in checkout:
+                    checkout = "12:00"
+
+                chunkText = f"""{hotelName} 체크인/체크아웃 안내
+
+Q: {hotelName} 체크인 시간이 어떻게 되나요?
+A: 체크인은 {checkin}부터 가능합니다.
+
+Q: {hotelName} 체크아웃 시간은 언제인가요?
+A: 체크아웃은 {checkout}까지입니다.
+
+체크인: {checkin}
+체크아웃: {checkout}"""
+
+                extraChunks.append(chunkText)
+                break
+
+        return extraChunks
+
+    def _extractFAQPairs(self, content: str, hotelName: str) -> list[str]:
+        """FAQ Q&A 쌍 추출"""
+        import re
+        extraChunks = []
+
+        # FAQ 페이지에서 Q&A 쌍 추출
+        # 패턴: "질문?\n상세내용 보기\n답변"
+        qaPairs = re.findall(
+            r'([^\n]+\?)\s*상세내용 보기\s*([^\n]+(?:\n[^\n]+)*?)(?=\n[^\n]+\?|\n전체|\Z)',
+            content,
+            re.MULTILINE
+        )
+
+        for question, answer in qaPairs[:10]:  # 최대 10개
+            question = question.strip()
+            answer = answer.strip()
+
+            if len(question) < 10 or len(answer) < 10:
+                continue
+
+            # 중요 FAQ만 선별
+            importantKeywords = [
+                "체크인", "체크아웃", "주차", "조식", "인원", "추가", "취소", "환불",
+                "반려", "애완", "수영", "피트니스", "사우나", "예약", "결제"
+            ]
+
+            if any(kw in question for kw in importantKeywords):
+                chunkText = f"""{hotelName} FAQ
+
+Q: {question}
+A: {answer}"""
+                extraChunks.append(chunkText)
+
+        return extraChunks
+
     def processItem(self, item: dict, hotel: str, idx: int) -> list[Chunk]:
         """개별 아이템을 청크로 변환"""
         chunks = []
@@ -296,6 +385,7 @@ class DeepCrawledProcessor:
         section = item.get("section", itemType)
         hotelName = item.get("hotel_name", "")
         content = item.get("content", "")
+        url = item.get("url", "")
 
         # 콘텐츠에서 서비스 정보 추출 (조식, 피트니스 등)
         if content:
@@ -308,13 +398,55 @@ class DeepCrawledProcessor:
                     hotel=hotel,
                     hotel_name=hotelName,
                     page_type="service",
-                    url=item.get("url", ""),
+                    url=url,
                     category="서비스",
                     language="ko",
                     updated_at=item.get("crawled_at", datetime.now().isoformat()),
                     chunk_index=0,
                     chunk_text=extraText,
                     metadata={"name": item.get("name", ""), "type": "service_info"}
+                )
+                chunks.append(extraChunk)
+
+        # 체크인/체크아웃 정보 추출 (객실 페이지에서)
+        if content and ("체크인" in content or "check-in" in content.lower()):
+            checkinTexts = self._extractCheckinInfo(content, hotelName)
+            for extraIdx, extraText in enumerate(checkinTexts):
+                extraDocId = f"{hotel}_checkin_{idx:03d}_{extraIdx}"
+                extraChunk = Chunk(
+                    chunk_id=f"{extraDocId}_c000",
+                    doc_id=extraDocId,
+                    hotel=hotel,
+                    hotel_name=hotelName,
+                    page_type="policy",
+                    url=url,
+                    category="체크인/아웃",
+                    language="ko",
+                    updated_at=item.get("crawled_at", datetime.now().isoformat()),
+                    chunk_index=0,
+                    chunk_text=extraText,
+                    metadata={"name": "체크인/체크아웃", "type": "policy_info"}
+                )
+                chunks.append(extraChunk)
+
+        # FAQ 페이지에서 Q&A 추출
+        if "faq" in url.lower():
+            faqTexts = self._extractFAQPairs(content, hotelName)
+            for extraIdx, extraText in enumerate(faqTexts):
+                extraDocId = f"{hotel}_faq_{idx:03d}_{extraIdx}"
+                extraChunk = Chunk(
+                    chunk_id=f"{extraDocId}_c000",
+                    doc_id=extraDocId,
+                    hotel=hotel,
+                    hotel_name=hotelName,
+                    page_type="faq",
+                    url=url,
+                    category="FAQ",
+                    language="ko",
+                    updated_at=item.get("crawled_at", datetime.now().isoformat()),
+                    chunk_index=0,
+                    chunk_text=extraText,
+                    metadata={"name": "FAQ", "type": "faq_info"}
                 )
                 chunks.append(extraChunk)
 
