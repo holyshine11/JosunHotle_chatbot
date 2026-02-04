@@ -58,3 +58,69 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 - 개인정보(예약번호/전화/카드번호) 입력 요구 금지
 - 결제/환불은 공식 페이지 링크 + 상담 유도
 - 근거 부족 시: "확인이 어렵습니다" + 공식 채널 안내
+
+---
+
+## 고도화 진행 현황 (2026-02-04)
+
+### 현재 상태: 정확도 100% (48/48 테스트 통과)
+
+| Phase | 내용 | 커밋 | 결과 |
+|-------|------|------|------|
+| 1 | 자동 평가 시스템 | - | 91.7% |
+| 2 | BM25 하이브리드 검색 | - | 91.7% |
+| 3 | 답변 검증 노드 | `40fdb2f` | 91.7% |
+| 4 | 데이터 품질 개선 | `f2e3054` | **100%** |
+| 5 | 모니터링 시스템 | `e90a1ce` | ✅ |
+
+### 주요 구현 내용
+
+1. **자동 평가 시스템** (`tests/evaluate.py`, `tests/golden_qa.json`)
+   - 48개 테스트 케이스 (5개 호텔, 12개 카테고리)
+   - 키워드 기반 정확도 측정, 할루시네이션 감지
+
+2. **BM25 하이브리드 검색** (`pipeline/indexer.py`)
+   - Vector (70%) + BM25 (30%) 결합
+   - 한국어 토크나이저 적용
+
+3. **답변 검증 노드** (`rag/graph.py`)
+   - 숫자 정보 할루시네이션 감지
+   - 추측 표현 필터링 ("약", "대략", "아마")
+
+4. **데이터 품질 개선** (`pipeline/index_supplementary.py`)
+   - 주차/위치 정보 보충 (7개 청크 추가)
+   - 총 361개 청크 인덱싱
+
+5. **모니터링 시스템** (`monitor/`)
+   - CLI 대시보드 (`dashboard.py`)
+   - 로그 분석기 (`analyzer.py`)
+   - 실패 케이스 수집기 (`collector.py`)
+
+### 자주 사용하는 명령어
+
+```bash
+# 평가 실행
+python tests/evaluate.py --save
+
+# 대시보드 확인
+python monitor/dashboard.py --days 7
+
+# 실패 케이스 분석
+python monitor/collector.py --save
+
+# 보충 데이터 인덱싱
+python pipeline/index_supplementary.py
+```
+
+### 데이터 현황
+
+- **총 청크**: 361개 (기존 354 + 보충 7)
+- **호텔**: 조선 팰리스, 그랜드 조선 부산/제주, 레스케이프, 그래비티 판교
+- **인덱스 경로**: `data/index/chroma/`, `data/index/bm25_index.pkl`
+
+### 추후 개선 가능 항목
+
+1. 쿼리 확장 (동의어 사전)
+2. 답변 템플릿 적용
+3. 웹 UI (Streamlit/Gradio)
+4. 실시간 알림 시스템
