@@ -95,10 +95,13 @@ async def chat(request: ChatRequest):
 # 정적 파일 제공 (UI)
 UI_DIR = PROJECT_ROOT / "ui"
 if UI_DIR.exists():
-    # CSS, JS, assets 등 정적 파일
-    app.mount("/css", StaticFiles(directory=UI_DIR / "css"), name="css")
-    app.mount("/js", StaticFiles(directory=UI_DIR / "js"), name="js")
-    app.mount("/assets", StaticFiles(directory=UI_DIR / "assets"), name="assets")
+    # CSS, JS, assets 등 정적 파일 (존재하는 경우만 마운트)
+    if (UI_DIR / "css").exists():
+        app.mount("/css", StaticFiles(directory=UI_DIR / "css"), name="css")
+    if (UI_DIR / "js").exists():
+        app.mount("/js", StaticFiles(directory=UI_DIR / "js"), name="js")
+    if (UI_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=UI_DIR / "assets"), name="assets")
 
     @app.get("/")
     async def serveIndex():
