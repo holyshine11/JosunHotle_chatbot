@@ -3,7 +3,7 @@
 > 작성일: 2026-02-04
 > 기반 문서: dev_guide.md
 
----
+--- 
 
 ## Phase 1: 환경 설정 및 프로젝트 초기화
 
@@ -103,10 +103,10 @@ josun_chatbot/
 | 2 | 조선호텔 URL 조사 | seed_urls.json | 완료 |
 | 3 | 크롤러 구현 | crawler/josun_crawler.py | 완료 |
 | 4 | 정제/청킹 파이프라인 | pipeline/*.py | 완료 |
-| 5 | Embedding + Chroma 인덱싱 | data/index/ | 완료 |
-| 6 | LangGraph RAG 서버 | rag/graph.py, rag/server.py | 완료 |
-| 7 | 정책 파일 | policies/josun_policies.yaml | 완료 |
-| 8 | 테스트 및 평가 | tests/test_qa.py | 완료 |
+| 5 | Embedding + Chroma 인덱싱 | data/index/ | 대기 |
+| 6 | LangGraph RAG 서버 | rag/graph.py, rag/server.py | 대기 |
+| 7 | 정책 파일 | policies/josun_policies.yaml | 대기 |
+| 8 | 테스트 및 평가 | tests/test_qa.py | 대기 |
 
 ---
 

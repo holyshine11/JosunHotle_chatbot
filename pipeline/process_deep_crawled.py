@@ -48,8 +48,28 @@ class DeepCrawledProcessor:
         text = text.replace('\u200b', '')
         return text.strip()
 
-    def _detectCategory(self, section: str, name: str = "") -> str:
-        """카테고리 감지"""
+    # 내용 기반 카테고리 재분류 키워드 (우선 적용)
+    CONTENT_CATEGORY_KEYWORDS = {
+        "반려동물": ["반려", "pet", "펫", "강아지", "애견", "동물", "소형견", "dog", "애완", "salon"],
+        "주차": ["주차", "parking", "발렛", "valet", "파킹"],
+        "체크인/아웃": ["체크인", "체크아웃", "check-in", "check-out", "입실", "퇴실"],
+        "조식/다이닝": ["조식", "breakfast", "아침식사", "뷔페"],
+        "피트니스": ["피트니스", "fitness", "헬스", "gym", "운동"],
+        "수영장": ["수영장", "pool", "풀", "swimming", "인피니티"],
+        "스파/웰니스": ["스파", "spa", "마사지", "massage", "테라피", "웰니스"],
+        "환불/취소": ["환불", "취소", "cancel", "refund", "위약금", "노쇼"],
+    }
+
+    def _detectCategory(self, section: str, name: str = "", content: str = "") -> str:
+        """카테고리 감지 (내용 기반 우선)"""
+        # 1. 내용/이름 기반 카테고리 우선 탐지
+        combinedText = f"{name} {content}".lower()
+        for category, keywords in self.CONTENT_CATEGORY_KEYWORDS.items():
+            for keyword in keywords:
+                if keyword.lower() in combinedText:
+                    return category
+
+        # 2. 섹션 기반 기본 카테고리
         categoryMap = {
             "rooms": "객실",
             "dining": "다이닝",
@@ -59,6 +79,7 @@ class DeepCrawledProcessor:
             "meeting": "연회",
             "offers": "패키지",
             "about": "소개",
+            "salon": "반려동물",  # pet friendly salon
         }
         return categoryMap.get(section, section)
 
@@ -377,6 +398,66 @@ A: {answer}"""
 
         return extraChunks
 
+    def _extractPetInfo(self, content: str, hotelName: str, url: str = "") -> list[str]:
+        """반려동물/펫 정보 추출"""
+        import re
+        extraChunks = []
+
+        # 반려동물 관련 키워드가 있는지 확인
+        petKeywords = ["반려", "pet", "펫", "강아지", "애견", "동물", "소형견", "dog"]
+        hasPetContent = any(kw.lower() in content.lower() for kw in petKeywords)
+
+        if not hasPetContent:
+            return extraChunks
+
+        # 반려동물 요금 정보 추출
+        pricePatterns = [
+            r'(반려[견동물]*[^\.]*?[\d,]+\s*원[^\.]*)',
+            r'(pet[^\.]*?[\d,]+\s*(?:원|KRW|won)[^\.]*)',
+            r'(강아지[^\.]*?[\d,]+\s*원[^\.]*)',
+        ]
+
+        priceInfo = []
+        for pattern in pricePatterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            priceInfo.extend(matches)
+
+        # 제한 사항 추출
+        restrictionPatterns = [
+            r'(\d+\s*kg\s*이하[^\.]*)',
+            r'(소형견[^\.]*)',
+            r'(공격성[^\.]*)',
+            r'(공용[^\.]*불가[^\.]*)',
+        ]
+
+        restrictions = []
+        for pattern in restrictionPatterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            restrictions.extend(matches)
+
+        # 청크 생성
+        if priceInfo or restrictions:
+            parts = [f"{hotelName} 반려동물 동반 안내\n"]
+            parts.append(f"Q: {hotelName}에서 반려견/반려동물 동반 가능한가요?")
+            parts.append("A:")
+
+            if priceInfo:
+                parts.append("- 반려동물 동반 가능 (사전 요청 및 예약 확정 필요)")
+                for info in priceInfo[:3]:
+                    cleanInfo = self._cleanText(info)
+                    parts.append(f"- {cleanInfo}")
+
+            if restrictions:
+                parts.append("\n이용 제한:")
+                for rest in restrictions[:5]:
+                    cleanRest = self._cleanText(rest)
+                    parts.append(f"- {cleanRest}")
+
+            chunkText = "\n".join(parts)
+            extraChunks.append(chunkText)
+
+        return extraChunks
+
     def processItem(self, item: dict, hotel: str, idx: int) -> list[Chunk]:
         """개별 아이템을 청크로 변환"""
         chunks = []
@@ -450,6 +531,27 @@ A: {answer}"""
                 )
                 chunks.append(extraChunk)
 
+        # 반려동물 정보 추출
+        if content:
+            petTexts = self._extractPetInfo(content, hotelName, url)
+            for extraIdx, extraText in enumerate(petTexts):
+                extraDocId = f"{hotel}_pet_{idx:03d}_{extraIdx}"
+                extraChunk = Chunk(
+                    chunk_id=f"{extraDocId}_c000",
+                    doc_id=extraDocId,
+                    hotel=hotel,
+                    hotel_name=hotelName,
+                    page_type="policy",
+                    url=url,
+                    category="반려동물",
+                    language="ko",
+                    updated_at=item.get("crawled_at", datetime.now().isoformat()),
+                    chunk_index=0,
+                    chunk_text=extraText,
+                    metadata={"name": "반려동물", "type": "pet_info"}
+                )
+                chunks.append(extraChunk)
+
         # 타입별 텍스트 생성
         if itemType == "room":
             text = self._buildRoomText(item)
@@ -475,7 +577,7 @@ A: {answer}"""
                 hotel_name=item.get("hotel_name", ""),
                 page_type=section,
                 url=item.get("url", ""),
-                category=self._detectCategory(section, item.get("name", "")),
+                category=self._detectCategory(section, item.get("name", ""), chunkText),
                 language="ko",
                 updated_at=item.get("crawled_at", datetime.now().isoformat()),
                 chunk_index=chunkIdx,

@@ -16,32 +16,84 @@ from pipeline.indexer import Indexer
 
 def loadSupplementaryData() -> list[dict]:
     """보충 데이터 로드 및 청크 형식 변환"""
-    dataPath = Path(__file__).parent.parent / "data" / "clean" / "supplementary_info.json"
-
-    if not dataPath.exists():
-        print(f"[오류] 보충 데이터 파일 없음: {dataPath}")
-        return []
-
-    with open(dataPath, "r", encoding="utf-8") as f:
-        items = json.load(f)
-
-    # 청크 형식으로 변환
+    basePath = Path(__file__).parent.parent / "data"
     chunks = []
-    for item in items:
-        chunk = {
-            "chunk_id": item["doc_id"],
-            "chunk_text": item["text"],
-            "doc_id": item["doc_id"],
-            "hotel": item["hotel"],
-            "hotel_name": item["hotel_name"],
-            "page_type": item["page_type"],
-            "url": item["url"],
-            "category": item["category"],
-            "language": item["language"],
-            "updated_at": datetime.now().isoformat(),
-            "chunk_index": 0
-        }
-        chunks.append(chunk)
+
+    # 1. 기존 supplementary_info.json 로드
+    dataPath = basePath / "clean" / "supplementary_info.json"
+    if dataPath.exists():
+        with open(dataPath, "r", encoding="utf-8") as f:
+            items = json.load(f)
+
+        for item in items:
+            chunk = {
+                "chunk_id": item["doc_id"],
+                "chunk_text": item["text"],
+                "doc_id": item["doc_id"],
+                "hotel": item["hotel"],
+                "hotel_name": item["hotel_name"],
+                "page_type": item["page_type"],
+                "url": item["url"],
+                "category": item["category"],
+                "language": item["language"],
+                "updated_at": datetime.now().isoformat(),
+                "chunk_index": 0
+            }
+            chunks.append(chunk)
+        print(f"  -> supplementary_info.json: {len(items)}개")
+
+    # 2. pet_policy.json 로드 (반려동물 정책)
+    petPath = basePath / "supplementary" / "pet_policy.json"
+    if petPath.exists():
+        with open(petPath, "r", encoding="utf-8") as f:
+            petItems = json.load(f)
+
+        for idx, item in enumerate(petItems):
+            chunk = {
+                "chunk_id": f"pet_policy_{item['hotel']}_{idx:03d}",
+                "chunk_text": item["text"],
+                "doc_id": f"pet_policy_{item['hotel']}",
+                "hotel": item["hotel"],
+                "hotel_name": item["hotel_name"],
+                "page_type": "policy",
+                "url": item.get("url", ""),
+                "category": item["category"],
+                "language": "ko",
+                "updated_at": datetime.now().isoformat(),
+                "chunk_index": idx
+            }
+            chunks.append(chunk)
+        print(f"  -> pet_policy.json: {len(petItems)}개")
+
+    # 3. supplementary 디렉토리의 다른 JSON 파일들도 로드
+    suppPath = basePath / "supplementary"
+    if suppPath.exists():
+        for jsonFile in suppPath.glob("*.json"):
+            if jsonFile.name == "pet_policy.json":
+                continue  # 이미 처리됨
+
+            with open(jsonFile, "r", encoding="utf-8") as f:
+                items = json.load(f)
+
+            for idx, item in enumerate(items):
+                chunk = {
+                    "chunk_id": f"{jsonFile.stem}_{item.get('hotel', 'unknown')}_{idx:03d}",
+                    "chunk_text": item.get("text", ""),
+                    "doc_id": f"{jsonFile.stem}_{item.get('hotel', 'unknown')}",
+                    "hotel": item.get("hotel", ""),
+                    "hotel_name": item.get("hotel_name", ""),
+                    "page_type": item.get("page_type", "policy"),
+                    "url": item.get("url", ""),
+                    "category": item.get("category", "일반"),
+                    "language": item.get("language", "ko"),
+                    "updated_at": datetime.now().isoformat(),
+                    "chunk_index": idx
+                }
+                chunks.append(chunk)
+            print(f"  -> {jsonFile.name}: {len(items)}개")
+
+    if not chunks:
+        print("[경고] 보충 데이터 파일 없음")
 
     return chunks
 

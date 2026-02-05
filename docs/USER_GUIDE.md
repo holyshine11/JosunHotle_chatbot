@@ -8,11 +8,12 @@
 ## 목차
 
 1. [Git 커밋 방법](#1-git-커밋-방법)
-2. [챗봇 실행 방법](#2-챗봇-실행-방법)
-3. [평가 및 테스트](#3-평가-및-테스트)
-4. [모니터링 대시보드](#4-모니터링-대시보드)
-5. [데이터 관리](#5-데이터-관리)
-6. [문제 해결](#6-문제-해결)
+2. [챗봇 실행 방법 (터미널)](#2-챗봇-실행-방법-터미널)
+3. [웹 UI 실행 방법](#3-웹-ui-실행-방법)
+4. [평가 및 테스트](#4-평가-및-테스트)
+5. [모니터링 대시보드](#5-모니터링-대시보드)
+6. [데이터 관리](#6-데이터-관리)
+7. [문제 해결](#7-문제-해결)
 
 ---
 
@@ -74,7 +75,7 @@ git pull origin main
 
 ---
 
-## 2. 챗봇 실행 방법
+## 2. 챗봇 실행 방법 (터미널)
 
 ### 2-1. 터미널에서 챗봇 실행
 
@@ -137,9 +138,60 @@ print(result["sources"]) # 출처 URL
 
 ---
 
-## 3. 평가 및 테스트
+## 3. 웹 UI 실행 방법
 
-### 3-1. 전체 평가 실행
+웹 브라우저에서 챗봇을 사용하려면 **2개의 서버**를 실행해야 합니다.
+
+### 3-1. 서버 실행 (터미널 2개 필요)
+
+**터미널 1 - RAG API 서버 (포트 8000)**
+```bash
+cd /Users/Dev/josun_chatbot
+python rag/server.py
+```
+
+**터미널 2 - UI 서버 (포트 3000)**
+```bash
+cd /Users/Dev/josun_chatbot/ui
+python -m http.server 3000
+```
+
+### 3-2. 브라우저 접속
+
+```
+http://localhost:3000
+```
+
+### 3-3. 웹 UI 사용법
+
+1. **호텔 선택**: 화면 중앙의 호텔 버튼 클릭 또는 우측 상단 드롭다운
+2. **질문 입력**: 하단 입력창에 질문 작성
+3. **전송**: Enter 키 또는 전송 버튼 클릭
+4. **줄바꿈**: Shift + Enter
+
+### 3-4. 주의사항
+
+- `file://` 프로토콜로 직접 열면 CORS 에러 발생
+- 반드시 `http://localhost:3000`으로 접속
+- RAG 서버(8000)가 먼저 실행되어 있어야 함
+
+### 3-5. 한 줄 실행 (백그라운드)
+
+```bash
+# 두 서버 동시 실행
+cd /Users/Dev/josun_chatbot && python rag/server.py &
+cd /Users/Dev/josun_chatbot/ui && python -m http.server 3000 &
+
+# 종료 시
+pkill -f "server.py"
+pkill -f "http.server"
+```
+
+---
+
+## 4. 평가 및 테스트
+
+### 4-1. 전체 평가 실행
 
 ```bash
 # 기본 평가 (48개 테스트)
@@ -152,7 +204,7 @@ python tests/evaluate.py --save
 python tests/evaluate.py --quick
 ```
 
-### 3-2. 특정 호텔/카테고리만 평가
+### 4-2. 특정 호텔/카테고리만 평가
 
 ```bash
 # 특정 호텔
@@ -162,7 +214,7 @@ python tests/evaluate.py --hotel josun_palace
 python tests/evaluate.py --category 체크인/아웃
 ```
 
-### 3-3. 평가 결과 확인
+### 4-3. 평가 결과 확인
 
 ```bash
 # 결과 파일 위치
@@ -177,9 +229,9 @@ cat tests/eval_report.json
 
 ---
 
-## 4. 모니터링 대시보드
+## 5. 모니터링 대시보드
 
-### 4-1. 대시보드 실행
+### 5-1. 대시보드 실행
 
 ```bash
 # 최근 7일 통계
@@ -195,7 +247,7 @@ python monitor/dashboard.py --summary
 python monitor/dashboard.py --export
 ```
 
-### 4-2. 실패 케이스 분석
+### 5-2. 실패 케이스 분석
 
 ```bash
 # 실패 케이스 확인
@@ -205,7 +257,7 @@ python monitor/collector.py
 python monitor/collector.py --save
 ```
 
-### 4-3. 로그 파일 위치
+### 5-3. 로그 파일 위치
 
 ```
 logs/
@@ -214,9 +266,9 @@ logs/
 
 ---
 
-## 5. 데이터 관리
+## 6. 데이터 관리
 
-### 5-1. 데이터 인덱싱
+### 6-1. 데이터 인덱싱
 
 ```bash
 # 보충 데이터 인덱싱 (주차, 위치 정보 등)
@@ -226,7 +278,7 @@ python pipeline/index_supplementary.py
 python pipeline/indexer.py
 ```
 
-### 5-2. 데이터 파일 구조
+### 6-2. 데이터 파일 구조
 
 ```
 data/
@@ -241,7 +293,7 @@ data/
     └── bm25_index.pkl        # BM25 인덱스
 ```
 
-### 5-3. 테스트 데이터 수정
+### 6-3. 테스트 데이터 수정
 
 테스트 케이스 추가/수정: `tests/golden_qa.json`
 
@@ -259,9 +311,9 @@ data/
 
 ---
 
-## 6. 문제 해결
+## 7. 문제 해결
 
-### 6-1. 자주 발생하는 오류
+### 7-1. 자주 발생하는 오류
 
 | 오류 | 원인 | 해결 방법 |
 |------|------|----------|
@@ -269,7 +321,7 @@ data/
 | `Connection refused` | Ollama 미실행 | `ollama serve` 실행 |
 | `No chunks found` | 인덱스 없음 | `python pipeline/indexer.py` |
 
-### 6-2. Ollama 관련
+### 7-2. Ollama 관련
 
 ```bash
 # Ollama 실행 확인
@@ -282,7 +334,7 @@ ollama pull qwen2.5:7b-instruct-q4_K_M
 ollama serve
 ```
 
-### 6-3. 환경 설정
+### 7-3. 환경 설정
 
 ```bash
 # 가상환경 활성화 (pyenv 사용 시)
@@ -292,7 +344,7 @@ pyenv activate josun_chatbot
 pip install -r requirements.txt
 ```
 
-### 6-4. 정확도가 낮을 때
+### 7-4. 정확도가 낮을 때
 
 1. **평가 실행**: `python tests/evaluate.py --save`
 2. **실패 케이스 확인**: `python monitor/collector.py`

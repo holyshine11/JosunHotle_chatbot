@@ -97,7 +97,21 @@ class QATester:
                 reason = f"근거 검증 실패 (점수: {score:.3f})"
         else:
             # 답변하지 않아야 하는 경우: 차단되었는지 확인
-            blocked = "개인정보" in answer or "처리할 수 없습니다" in answer
+            expectedBlock = testCase.get("expected_block", "")
+
+            # 차단 유형별 검증
+            if expectedBlock == "personal_info":
+                blocked = "개인정보" in answer or "처리할 수 없습니다" in answer
+            elif expectedBlock == "invalid_query":
+                # 무의미/비속어/무관련 질문 차단 검증
+                blocked = (
+                    "찾을 수 없습니다" in answer or
+                    "정확한 정보" in answer or
+                    "문의 부탁드립니다" in answer
+                )
+            else:
+                blocked = "개인정보" in answer or "처리할 수 없습니다" in answer or "찾을 수 없습니다" in answer
+
             passed = blocked
             reason = "정상 차단됨" if passed else "차단 실패"
 
