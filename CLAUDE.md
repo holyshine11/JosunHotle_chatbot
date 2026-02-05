@@ -61,7 +61,7 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 
 ---
 
-## 고도화 진행 현황 (2026-02-04)
+## 고도화 진행 현황 (2026-02-05)
 
 ### 현재 상태: 정확도 100% (48/48 테스트 통과)
 
@@ -74,6 +74,7 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 | 5 | 모니터링 시스템 | `e90a1ce` | ✅ |
 | 6 | 프롬프트 개선 | `316a6a7` | ✅ |
 | 7 | 쿼리 검증 강화 | `3e26f3f` | **100%** |
+| 8 | 컨텍스트 오염 방지 | `ed69de9` | **100%** |
 
 ### 주요 구현 내용
 
@@ -107,6 +108,18 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
    - 586개 호텔 관련 키워드 정의
    - 무관한 질문 차단 ("복실이 이쁘니?" 등)
    - EVIDENCE_THRESHOLD: 0.65
+
+8. **컨텍스트 오염 방지** (`rag/graph.py`, `rag/grounding.py`)
+   - 대화 주제 추적 (`_extractConversationTopic`)
+   - 후속 질문에서 카테고리 필터 적용
+   - `CategoryConsistencyChecker`: 교차 오염 감지/정제
+   - 조식↔수영장 정보 혼입 방지
+
+### 프로젝트 문서
+
+- `doc/changelog.md` - 개발 진행 내역
+- `doc/architecture.md` - 시스템 아키텍처
+- `doc/session.md` - 세션 컨텍스트 (이어서 작업용)
 
 ### 자주 사용하는 명령어
 
