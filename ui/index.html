@@ -9,29 +9,77 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- Pretendard 폰트 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <!-- 스타일시트 -->
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Tailwind 다크모드 설정
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#1a365d',
+              hover: '#2c5282',
+              light: '#3182ce'
+            },
+            accent: {
+              DEFAULT: '#c9a961',
+              hover: '#d4b978',
+              dark: '#b8963f'
+            }
+          }
+        }
+      }
+    }
+  </script>
   <style>
     * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    /* 스켈레톤 애니메이션 */
     @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
     .skeleton-line { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* 메시지 진입 애니메이션 */
+    @keyframes messageSlideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .message-enter { animation: messageSlideIn 0.3s ease-out forwards; }
+
+    /* 드롭다운 애니메이션 */
+    @keyframes dropdownSlide {
+      from { opacity: 0; transform: translateY(-8px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .dropdown-enter { animation: dropdownSlide 0.2s ease-out forwards; }
 
     /* 마크다운 콘텐츠 스타일 */
     .markdown-content {
       word-break: keep-all;
       overflow-wrap: break-word;
-      line-height: 1.7;
+      line-height: 1.8;
     }
     .markdown-content p { margin: 0 0 12px 0; }
     .markdown-content p:last-child { margin-bottom: 0; }
     .markdown-content a {
-      color: #2563eb;
+      color: #3182ce;
       text-decoration: underline;
       word-break: break-all;
+      transition: color 0.15s ease;
     }
+    .markdown-content a:hover { color: #c9a961; }
+    .dark .markdown-content a { color: #4a90d9; }
+    .dark .markdown-content a:hover { color: #c9a961; }
     .markdown-content code {
       background: #f3f4f6;
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.9em;
+    }
+    .dark .markdown-content code {
+      background: #334155;
+      color: #e2e8f0;
     }
     .markdown-content pre {
       background: #1f2937;
@@ -51,22 +99,23 @@
       margin: 8px 0;
       list-style-position: inside;
     }
-    .markdown-content li {
-      margin: 4px 0;
-    }
+    .markdown-content li { margin: 4px 0; }
+
+    /* 테마 전환 애니메이션 */
+    html { transition: background-color 0.3s ease, color 0.3s ease; }
   </style>
 </head>
-<body class="bg-white h-screen flex flex-col text-base">
+<body class="bg-gray-50 dark:bg-slate-900 h-screen flex flex-col text-base transition-colors duration-300">
   <div id="app" class="h-full flex flex-col"></div>
 
   <script>
     // ========== 호텔 데이터 ==========
     const HOTELS = [
-      { id: 'josun_palace', name: '조선 팰리스' },
-      { id: 'grand_josun_busan', name: '그랜드 조선 부산' },
-      { id: 'grand_josun_jeju', name: '그랜드 조선 제주' },
-      { id: 'lescape', name: '레스케이프' },
-      { id: 'gravity_pangyo', name: '그래비티 판교' }
+      { id: 'josun_palace', name: '조선 팰리스', color: '#1a365d' },
+      { id: 'grand_josun_busan', name: '그랜드 조선 부산', color: '#1e3a5f' },
+      { id: 'grand_josun_jeju', name: '그랜드 조선 제주', color: '#1a4d66' },
+      { id: 'lescape', name: '레스케이프', color: '#2d3748' },
+      { id: 'gravity_pangyo', name: '그래비티 판교', color: '#1a365d' }
     ];
 
     // ========== 상태 ==========
@@ -74,12 +123,29 @@
       currentHotel: null,
       messages: [],
       isSending: false,
-      showHotelDropdown: false
+      showHotelDropdown: false,
+      theme: localStorage.getItem('theme') || 'light'
     };
 
     // 타이머 관련
     let thinkingTimer = null;
     let thinkingStartTime = null;
+
+    // ========== 테마 관리 ==========
+    function initTheme() {
+      if (state.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+
+    function toggleTheme() {
+      state.theme = state.theme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', state.theme);
+      initTheme();
+      render();
+    }
 
     // ========== API 설정 ==========
     const API_BASE_URL = 'http://localhost:8000';
@@ -98,7 +164,7 @@
     function getConversationHistory() {
       const relevantMessages = state.messages
         .filter(m => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
-        .slice(-6)  // 최근 6개
+        .slice(-6)
         .map(m => ({
           role: m.role,
           content: m.content
@@ -110,57 +176,119 @@
     function render() {
       const app = document.getElementById('app');
       const h = state.currentHotel;
+      const isDark = state.theme === 'dark';
 
       app.innerHTML = `
-        <header class="border-b px-5 py-4 flex items-center justify-between flex-shrink-0">
-          <span class="text-lg font-semibold text-gray-900">Josun Hotel 챗봇</span>
-          <div class="flex items-center gap-4">
+        <header class="border-b border-gray-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between flex-shrink-0 bg-white dark:bg-slate-800 transition-colors duration-300">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <span class="text-accent-dark dark:text-accent text-xl sm:text-2xl font-bold tracking-tight">J</span>
+            <span class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 tracking-wide">Josun Hotel</span>
+          </div>
+          <div class="flex items-center gap-2 sm:gap-4">
+            <!-- 호텔 선택 드롭다운 -->
             <div class="relative">
-              <button data-action="toggle-dropdown" class="text-base px-4 py-2 rounded-full border ${h ? 'border-gray-300 text-gray-700' : 'border-gray-400 text-gray-500'} hover:bg-gray-50 transition">
+              <button data-action="toggle-dropdown"
+                class="text-sm sm:text-base px-3 sm:px-4 py-2 rounded-full border transition-all duration-200
+                  ${h
+                    ? 'border-accent/50 text-gray-700 dark:text-gray-200 bg-accent/5 dark:bg-accent/10 hover:bg-accent/10 dark:hover:bg-accent/20'
+                    : 'border-gray-300 dark:border-slate-600 text-gray-500 dark:text-gray-400 hover:border-accent dark:hover:border-accent'
+                  }">
                 ${h ? h.name : '호텔 선택'}
+                <svg class="w-4 h-4 ml-1 inline-block transition-transform ${state.showHotelDropdown ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
               </button>
-              <div id="dropdown" class="${state.showHotelDropdown ? '' : 'hidden'} absolute right-0 mt-2 w-52 bg-white border rounded-xl shadow-lg py-2 z-10">
+              <div id="dropdown" class="${state.showHotelDropdown ? 'dropdown-enter' : 'hidden'} absolute right-0 mt-2 w-48 sm:w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-2 z-10">
                 ${HOTELS.map(hotel => `
-                  <button data-action="select-hotel" data-hotel-id="${hotel.id}" class="w-full text-left px-5 py-3 text-base ${h && h.id === hotel.id ? 'bg-gray-100 text-gray-900 font-medium' : 'text-gray-700'} hover:bg-gray-50">
+                  <button data-action="select-hotel" data-hotel-id="${hotel.id}"
+                    class="w-full text-left px-4 sm:px-5 py-2.5 sm:py-3 text-sm sm:text-base transition-colors duration-150
+                      ${h && h.id === hotel.id
+                        ? 'bg-accent/10 text-accent-dark dark:text-accent font-medium'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+                      }">
+                    <span class="inline-block w-2 h-2 rounded-full mr-2" style="background-color: ${hotel.color}"></span>
                     ${hotel.name}
                   </button>
                 `).join('')}
               </div>
             </div>
-            <button data-action="new-chat" class="text-base text-gray-500 hover:text-gray-700">새 대화</button>
+
+            <!-- 새 대화 버튼 -->
+            <button data-action="new-chat"
+              class="text-sm sm:text-base text-gray-500 dark:text-gray-400 hover:text-accent dark:hover:text-accent transition-colors duration-200 hidden sm:block">
+              새 대화
+            </button>
+
+            <!-- 모바일 새 대화 아이콘 -->
+            <button data-action="new-chat"
+              class="sm:hidden p-2 text-gray-500 dark:text-gray-400 hover:text-accent dark:hover:text-accent transition-colors duration-200"
+              title="새 대화">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+            </button>
+
+            <!-- 테마 토글 버튼 -->
+            <button data-action="toggle-theme"
+              class="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200
+                bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600
+                hover:bg-accent/10 dark:hover:bg-accent/20 hover:border-accent dark:hover:border-accent
+                text-gray-600 dark:text-gray-300 hover:text-accent dark:hover:text-accent"
+              title="${isDark ? '라이트 모드' : '다크 모드'}">
+              ${isDark
+                ? '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>'
+                : '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>'
+              }
+            </button>
           </div>
         </header>
 
-        <div id="message-list" class="flex-1 overflow-y-auto">
-          <div class="max-w-3xl mx-auto px-5 py-8">
+        <div id="message-list" class="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900 transition-colors duration-300">
+          <div class="max-w-3xl mx-auto px-4 sm:px-5 py-6 sm:py-8">
             ${state.messages.length === 0 ? renderEmptyState(h) : renderMessages()}
           </div>
         </div>
 
-        <div class="border-t p-5 flex-shrink-0">
+        <div class="border-t border-gray-200 dark:border-slate-700 p-3 sm:p-5 flex-shrink-0 bg-white dark:bg-slate-800 transition-colors duration-300">
           <div class="max-w-3xl mx-auto">
-            <div class="flex gap-4">
+            <div class="flex gap-2 sm:gap-4">
               <textarea
                 id="message-input"
-                class="flex-1 border rounded-xl px-5 py-4 resize-none focus:outline-none focus:border-gray-400 text-base ${!h ? 'bg-gray-100 cursor-not-allowed' : ''}"
+                class="flex-1 border border-gray-200 dark:border-slate-600 rounded-xl px-4 sm:px-5 py-3 sm:py-4 resize-none
+                  text-sm sm:text-base transition-all duration-200
+                  bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100
+                  placeholder-gray-400 dark:placeholder-gray-500
+                  focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20
+                  ${!h ? 'bg-gray-100 dark:bg-slate-800 cursor-not-allowed' : ''}"
                 rows="1"
-                placeholder="${!h ? '호텔을 먼저 선택해 주세요' : '메시지를 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)'}"
+                placeholder="${!h ? '호텔을 먼저 선택해 주세요' : '메시지를 입력하세요...'}"
                 ${state.isSending || !h ? 'disabled' : ''}
               ></textarea>
               <button
                 data-action="send"
-                class="px-6 py-3 text-base rounded-xl transition ${state.isSending || !h ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'}"
+                class="px-4 sm:px-6 py-3 text-sm sm:text-base rounded-xl transition-all duration-200 font-medium
+                  ${state.isSending || !h
+                    ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-primary to-primary-hover text-white hover:shadow-lg hover:shadow-primary/25 active:scale-95'
+                  }"
                 ${state.isSending || !h ? 'disabled' : ''}
-              >전송</button>
+              >
+                <span class="hidden sm:inline">전송</span>
+                <svg class="w-5 h-5 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                </svg>
+              </button>
             </div>
-            <p class="text-sm text-gray-400 mt-3 text-center">AI 챗봇은 간혹 사실과 다른 내용이 포함될 수 있습니다.</p>
+            <p class="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2 sm:mt-3 text-center">
+              AI 챗봇은 간혹 사실과 다른 내용이 포함될 수 있습니다.
+            </p>
           </div>
         </div>
       `;
 
       // 입력창 포커스 및 키보드 이벤트
       const input = document.getElementById('message-input');
-      if (input) {
+      if (input && !state.isSending && state.currentHotel) {
         input.focus();
         input.onkeydown = (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
@@ -176,19 +304,38 @@
     function renderEmptyState(h) {
       return `
         <div class="h-full flex items-center justify-center min-h-[60vh]">
-          <div class="text-center">
-            <p class="text-2xl font-semibold text-gray-800 mb-8">${h ? h.name + '에 대해 질문해 주세요' : '호텔을 선택 후 질문해 주세요'}</p>
-            <div class="flex flex-wrap justify-center gap-3 mb-10">
+          <div class="text-center px-4">
+            <div class="mb-6 sm:mb-8">
+              <span class="text-4xl sm:text-5xl font-bold text-accent">J</span>
+            </div>
+            <p class="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6 sm:mb-8">
+              ${h ? h.name + '에 대해 질문해 주세요' : '호텔을 선택 후 질문해 주세요'}
+            </p>
+            <div class="flex flex-wrap justify-center gap-2 sm:gap-3 mb-8 sm:mb-10">
               ${HOTELS.map(hotel => `
-                <button data-action="select-hotel" data-hotel-id="${hotel.id}" class="text-base px-4 py-2 rounded-full border ${h && h.id === hotel.id ? 'border-gray-900 text-gray-900 bg-gray-100 font-medium' : 'border-gray-300 text-gray-600'} hover:border-gray-400 transition">
+                <button data-action="select-hotel" data-hotel-id="${hotel.id}"
+                  class="text-sm sm:text-base px-3 sm:px-4 py-2 rounded-full border transition-all duration-200
+                    ${h && h.id === hotel.id
+                      ? 'border-accent bg-accent/10 text-accent-dark dark:text-accent font-medium'
+                      : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 hover:border-accent hover:text-accent'
+                    }">
                   ${hotel.name}
                 </button>
               `).join('')}
             </div>
-            <div class="space-y-3 text-base text-gray-400">
-              <p data-action="example" data-text="체크인 시간이 어떻게 되나요?" class="cursor-pointer hover:text-gray-600">체크인 시간이 어떻게 되나요?</p>
-              <p data-action="example" data-text="주차장 이용 가능한가요?" class="cursor-pointer hover:text-gray-600">주차장 이용 가능한가요?</p>
-              <p data-action="example" data-text="조식 운영 시간 알려주세요" class="cursor-pointer hover:text-gray-600">조식 운영 시간 알려주세요</p>
+            <div class="space-y-2 sm:space-y-3 text-sm sm:text-base text-gray-400 dark:text-gray-500">
+              <p data-action="example" data-text="체크인 시간이 어떻게 되나요?"
+                class="cursor-pointer hover:text-accent dark:hover:text-accent transition-colors duration-200 py-1">
+                체크인 시간이 어떻게 되나요?
+              </p>
+              <p data-action="example" data-text="주차장 이용 가능한가요?"
+                class="cursor-pointer hover:text-accent dark:hover:text-accent transition-colors duration-200 py-1">
+                주차장 이용 가능한가요?
+              </p>
+              <p data-action="example" data-text="조식 운영 시간 알려주세요"
+                class="cursor-pointer hover:text-accent dark:hover:text-accent transition-colors duration-200 py-1">
+                조식 운영 시간 알려주세요
+              </p>
             </div>
           </div>
         </div>
@@ -196,12 +343,20 @@
     }
 
     function renderMessages() {
-      return `<div class="space-y-8">${state.messages.map(renderMessage).join('')}</div>`;
+      return `<div class="space-y-6 sm:space-y-8">${state.messages.map(renderMessage).join('')}</div>`;
     }
 
-    function renderMessage(msg) {
+    function renderMessage(msg, index) {
       if (msg.role === 'system') {
-        return `<div class="text-center text-sm text-gray-400 py-3">${msg.content}</div>`;
+        return `
+          <div class="text-center text-xs sm:text-sm text-gray-400 dark:text-gray-500 py-2 sm:py-3 message-enter">
+            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 dark:bg-slate-800">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              ${msg.content}
+            </span>
+          </div>`;
       }
 
       const isUser = msg.role === 'user';
@@ -209,12 +364,15 @@
       if (msg.status === 'thinking') {
         const elapsed = thinkingStartTime ? Math.floor((Date.now() - thinkingStartTime) / 1000) : 0;
         return `
-          <div class="flex justify-start">
-            <div class="max-w-[85%]">
-              <p class="text-base text-gray-500 mb-3">생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...</p>
-              <div class="space-y-3">
-                <div class="skeleton-line h-5 bg-gray-200 rounded w-72"></div>
-                <div class="skeleton-line h-5 bg-gray-200 rounded w-56"></div>
+          <div class="flex justify-start message-enter">
+            <div class="max-w-[90%] sm:max-w-[85%]">
+              <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
+              </p>
+              <div class="space-y-2 sm:space-y-3">
+                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
+                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
               </div>
             </div>
           </div>
@@ -225,15 +383,17 @@
 
       // 봇 응답에 타임스탬프 표시
       const timeInfo = (!isUser && msg.timestamp && msg.elapsedTime !== undefined)
-        ? `<p class="text-sm text-gray-400 mt-3">${msg.timestamp} (${String(msg.elapsedTime).padStart(2, '0')}s)</p>`
+        ? `<p class="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2 sm:mt-3">${msg.timestamp} (${String(msg.elapsedTime).padStart(2, '0')}s)</p>`
         : '';
 
       // 명확화 옵션 버튼 렌더링
       const clarificationButtons = (!isUser && msg.needsClarification && msg.clarificationOptions && msg.clarificationOptions.length > 0)
-        ? `<div class="flex flex-wrap gap-2 mt-4">
+        ? `<div class="flex flex-wrap gap-2 mt-3 sm:mt-4">
             ${msg.clarificationOptions.map(opt => `
               <button data-action="clarification-option" data-option="${escapeHtml(opt)}"
-                class="px-4 py-2 text-sm rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 transition">
+                class="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-full border border-gray-300 dark:border-slate-600
+                  text-gray-700 dark:text-gray-300 hover:bg-accent/10 hover:border-accent hover:text-accent
+                  dark:hover:bg-accent/20 dark:hover:border-accent dark:hover:text-accent transition-all duration-200">
                 ${escapeHtml(opt)}
               </button>
             `).join('')}
@@ -241,9 +401,12 @@
         : '';
 
       return `
-        <div class="flex ${isUser ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-[85%] ${isUser ? 'bg-gray-100 rounded-2xl rounded-br-sm px-5 py-4' : ''}">
-            <div class="${isUser ? 'text-base' : 'text-base markdown-content'}">${content}</div>
+        <div class="flex ${isUser ? 'justify-end' : 'justify-start'} message-enter">
+          <div class="max-w-[90%] sm:max-w-[85%] ${isUser
+            ? 'bg-gradient-to-br from-primary to-primary-hover text-white rounded-2xl rounded-br-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm'
+            : 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm'
+          }">
+            <div class="${isUser ? 'text-sm sm:text-base' : 'text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200'}">${content}</div>
             ${clarificationButtons}
             ${timeInfo}
           </div>
@@ -338,7 +501,6 @@
             status: 'done',
             timestamp: timestamp,
             elapsedTime: elapsedTime,
-            // 명확화 관련 필드
             needsClarification: response.needsClarification || false,
             clarificationOptions: response.clarificationOptions || []
           };
@@ -406,6 +568,10 @@
           handleSend();
           break;
 
+        case 'toggle-theme':
+          toggleTheme();
+          break;
+
         case 'example':
           if (state.currentHotel) {
             const input = document.getElementById('message-input');
@@ -414,15 +580,15 @@
               input.focus();
             }
           } else {
-            alert('호텔을 선택 후 이용해 주세요');
+            // 호텔 미선택 시 드롭다운 열기
+            state.showHotelDropdown = true;
+            render();
           }
           break;
 
         case 'clarification-option':
-          // 명확화 옵션 선택 시 해당 옵션으로 새 질문
           const selectedOption = target.dataset.option;
           if (selectedOption && state.currentHotel && !state.isSending) {
-            // 입력창에 선택한 옵션 넣고 전송
             const input = document.getElementById('message-input');
             if (input) {
               input.value = selectedOption;
@@ -434,6 +600,7 @@
     });
 
     // ========== 초기화 ==========
+    initTheme();
     render();
   </script>
 </body>

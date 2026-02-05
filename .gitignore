@@ -9,11 +9,11 @@ venv/
 env/
 .env
 
-# Data (large files)
+# Data (large files - 인덱스는 배포용으로 포함)
 data/raw/
 data/clean/
 data/chunks/
-data/index/
+# data/index/  # 배포를 위해 인덱스는 git에 포함
 data/logs/
 
 # IDE

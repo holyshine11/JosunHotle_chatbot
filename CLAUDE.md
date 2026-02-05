@@ -124,8 +124,22 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 ### 자주 사용하는 명령어
 
 ```bash
-# 평가 실행
+# 의존성 설치
+pip install -r requirements.txt
+
+# RAG API 서버 실행 (포트 8000)
+python rag/server.py
+
+# 웹 UI 서버 실행 (포트 3000)
+cd ui && python -m http.server 3000
+
+# 전체 평가 실행
 python tests/evaluate.py --save
+
+# 특정 호텔/카테고리만 테스트
+python tests/evaluate.py --hotel busan
+python tests/evaluate.py --category dining
+python tests/evaluate.py --quick  # 10개 샘플만
 
 # 대시보드 확인
 python monitor/dashboard.py --days 7
@@ -147,5 +161,5 @@ python pipeline/index_supplementary.py
 
 1. 쿼리 확장 (동의어 사전)
 2. 답변 템플릿 적용
-3. 웹 UI (Streamlit/Gradio)
-4. 실시간 알림 시스템
+3. 실시간 알림 시스템
+4. 다국어 지원 강화 (영어/일본어)

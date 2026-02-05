@@ -1,10 +1,80 @@
-/* 기본 스타일 */
+/* ========== 색상 시스템 (CSS 변수) ========== */
+:root {
+  /* 프라이머리 색상 */
+  --color-primary: #1a365d;
+  --color-primary-hover: #2c5282;
+  --color-primary-light: #3182ce;
+
+  /* 골드 악센트 (프리미엄 느낌) */
+  --color-accent: #c9a961;
+  --color-accent-hover: #d4b978;
+  --color-accent-dark: #b8963f;
+
+  /* 텍스트 색상 */
+  --color-text: #2d2d2d;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  /* 배경 색상 */
+  --color-bg: #fafafa;
+  --color-bg-white: #ffffff;
+  --color-bg-hover: #f3f4f6;
+  --color-bg-message: #f8f9fa;
+
+  /* 보더 색상 */
+  --color-border: #e5e7eb;
+  --color-border-hover: #d1d5db;
+
+  /* 그림자 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* 트랜지션 */
+  --transition-fast: 150ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
+}
+
+/* 다크모드 색상 */
+[data-theme="dark"] {
+  --color-primary: #4a90d9;
+  --color-primary-hover: #5ba3ed;
+  --color-primary-light: #6bb3f7;
+
+  --color-accent: #c9a961;
+  --color-accent-hover: #d4b978;
+  --color-accent-dark: #b8963f;
+
+  --color-text: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  --color-bg: #0f172a;
+  --color-bg-white: #1e293b;
+  --color-bg-hover: #334155;
+  --color-bg-message: #1e293b;
+
+  --color-border: #334155;
+  --color-border-hover: #475569;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* ========== 기본 스타일 ========== */
 * {
   box-sizing: border-box;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 /* 스크롤바 스타일 */
@@ -229,4 +299,241 @@ body {
 
 .btn-secondary:hover {
   background-color: #d1d5db;
+}
+
+/* ========== 새로운 애니메이션 ========== */
+
+/* 메시지 진입 애니메이션 */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: messageSlideIn 0.3s ease-out forwards;
+}
+
+/* 드롭다운 슬라이드 애니메이션 */
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-enter {
+  animation: dropdownSlide 0.2s ease-out forwards;
+}
+
+/* 버튼 프레스 효과 */
+.btn-press {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-press:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-press:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 골드 악센트 버튼 */
+.btn-gold {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: #1a1a1a;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.btn-gold:hover {
+  background: linear-gradient(135deg, var(--color-accent-hover) 0%, var(--color-accent) 100%);
+  box-shadow: 0 4px 12px rgba(201, 169, 97, 0.4);
+}
+
+/* 입력창 포커스 효과 */
+.input-premium {
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  transition: all var(--transition-fast);
+}
+
+.input-premium:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(201, 169, 97, 0.15);
+  background-color: var(--color-bg-white);
+}
+
+/* 다크모드 입력창 */
+[data-theme="dark"] .input-premium {
+  background-color: var(--color-bg-white);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .input-premium:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(201, 169, 97, 0.2);
+}
+
+/* 프리미엄 헤더 스타일 */
+.header-premium {
+  background-color: var(--color-bg-white);
+  border-bottom: 1px solid var(--color-border);
+  transition: all var(--transition-normal);
+}
+
+[data-theme="dark"] .header-premium {
+  background-color: var(--color-bg-white);
+  border-color: var(--color-border);
+}
+
+/* 호텔 선택 버튼 스타일 */
+.hotel-select-btn {
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+}
+
+.hotel-select-btn:hover {
+  border-color: var(--color-accent);
+  background-color: var(--color-bg-hover);
+}
+
+.hotel-select-btn.active {
+  border-color: var(--color-accent);
+  background-color: rgba(201, 169, 97, 0.1);
+}
+
+/* 메시지 버블 프리미엄 스타일 */
+.message-bubble-user {
+  background: linear-gradient(135deg, var(--color-primary) 0%, #2c5282 100%);
+  color: white;
+  border-radius: 20px 20px 4px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.message-bubble-assistant {
+  background-color: var(--color-bg-message);
+  color: var(--color-text);
+  border-radius: 20px 20px 20px 4px;
+  border: 1px solid var(--color-border);
+}
+
+[data-theme="dark"] .message-bubble-assistant {
+  background-color: var(--color-bg-white);
+  border-color: var(--color-border);
+}
+
+/* 테마 토글 버튼 */
+.theme-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-bg-message);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* 로딩 스켈레톤 다크모드 */
+[data-theme="dark"] .skeleton-line {
+  background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%);
+  background-size: 200% 100%;
+}
+
+/* 드롭다운 다크모드 */
+[data-theme="dark"] .dropdown-menu {
+  background-color: var(--color-bg-white);
+  border-color: var(--color-border);
+}
+
+/* 링크 스타일 */
+.markdown-content a {
+  color: var(--color-primary-light);
+  transition: color var(--transition-fast);
+}
+
+.markdown-content a:hover {
+  color: var(--color-accent);
+}
+
+[data-theme="dark"] .markdown-content a {
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .markdown-content a:hover {
+  color: var(--color-accent);
+}
+
+/* 스크롤바 다크모드 */
+[data-theme="dark"]::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+[data-theme="dark"]::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+[data-theme="dark"]::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* ========== 타이포그래피 개선 ========== */
+.title-premium {
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.text-premium {
+  line-height: 1.8;
+  letter-spacing: 0.2px;
+}
+
+/* 시간 표시 스타일 */
+.timestamp {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  letter-spacing: 0.3px;
+}
+
+/* ========== 반응형 개선 ========== */
+@media (max-width: 640px) {
+  .title-premium {
+    font-size: 1rem;
+  }
+
+  .message-bubble-user,
+  .message-bubble-assistant {
+    max-width: 90%;
+  }
+
+  .theme-toggle {
+    width: 40px;
+    height: 40px;
+  }
 }

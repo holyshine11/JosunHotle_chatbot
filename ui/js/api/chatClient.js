@@ -4,7 +4,8 @@
  */
 
 // API 베이스 URL (환경변수 또는 기본값)
-const API_BASE_URL = window.VITE_CHAT_API_BASE_URL || 'http://localhost:8000';
+// 같은 도메인에서 제공되면 빈 문자열 사용
+const API_BASE_URL = window.VITE_CHAT_API_BASE_URL || '';
 
 // 요청 타임아웃 (60초)
 const REQUEST_TIMEOUT = 60000;
@@ -166,6 +167,5 @@ export async function sendMessageMock(hotelId, message, history = []) {
   };
 }
 
-// 사용할 API 함수 (Mock 또는 실제)
-// 실제 백엔드 연동 시 sendMessage로 변경
-export const chat = sendMessageMock;
+// 사용할 API 함수 (실제 백엔드 연동)
+export const chat = sendMessage;

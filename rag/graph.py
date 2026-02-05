@@ -13,8 +13,10 @@ from datetime import datetime
 from typing import TypedDict, Literal, Optional
 from pathlib import Path
 
-import ollama
 from langgraph.graph import StateGraph, END
+
+# LLM Provider (Ollama 또는 Groq)
+from rag.llm_provider import callLLM
 
 # Grounding Gate import
 from rag.grounding import groundingGate, GroundingResult, categoryChecker
@@ -623,15 +625,11 @@ class RAGGraph:
 [재작성된 질문]"""
 
         try:
-            response = ollama.chat(
-                model="qwen2.5:7b",
-                messages=[{"role": "user", "content": rewritePrompt}],
-                options={
-                    "temperature": 0.0,
-                    "num_predict": 100,
-                }
-            )
-            rewrittenQuery = response["message"]["content"].strip()
+            # LLM Provider를 통한 쿼리 재작성
+            rewrittenQuery = callLLM(
+                prompt=rewritePrompt,
+                temperature=0.0
+            ).strip()
 
             # 빈 응답이나 너무 긴 응답 방지
             if not rewrittenQuery or len(rewrittenQuery) > 200:
@@ -1021,18 +1019,12 @@ class RAGGraph:
 4. "궁금하신가요?" 같은 추가 질문은 절대 하지 마세요"""
 
         try:
-            response = ollama.chat(
-                model=self.LLM_MODEL,
-                messages=[
-                    {"role": "system", "content": systemPrompt},
-                    {"role": "user", "content": userPrompt}
-                ],
-                options={
-                    "temperature": 0.0,  # 온도 0으로 완전 결정론적 답변
-                    "num_predict": 512,  # 토큰 수 증가 (긴 답변 대응)
-                }
-            )
-            answer = response["message"]["content"].strip()
+            # LLM Provider를 통한 답변 생성
+            answer = callLLM(
+                prompt=userPrompt,
+                system=systemPrompt,
+                temperature=0.0
+            ).strip()
 
             # 후처리: 중국어/일본어 문자 제거 (qwen 모델의 할루시네이션 방지)
             # 중국어 한자 범위: \u4e00-\u9fff
