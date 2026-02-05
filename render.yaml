@@ -16,6 +16,6 @@ services:
       - key: GROQ_API_KEY
         sync: false  # Render 대시보드에서 수동 설정
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.0"
     healthCheckPath: /health
     autoDeploy: true
