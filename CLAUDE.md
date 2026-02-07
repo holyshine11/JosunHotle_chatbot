@@ -61,7 +61,7 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 
 ---
 
-## 고도화 진행 현황 (2026-02-06)
+## 고도화 진행 현황 (2026-02-07)
 
 ### 현재 상태: 정확도 96% (48/50 테스트 통과)
 
@@ -80,6 +80,7 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 | 11 | 반려동물 정책 할루시네이션 수정 | ✅ |
 | 12 | 모호한 질문 의도 파악 개선 | ✅ |
 | 13 | 맥락 인식 명확화 시스템 | **96%** |
+| 14 | 주체 감지 + 호텔명 제거 + 다턴 맥락 개선 | **96%** |
 
 ### 주요 구현 내용
 
@@ -143,6 +144,13 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
     - `CONTEXT_CLARIFICATION` 패턴 (반려동물, 어린이)
     - `direct_triggers`로 질문형 감지 시 직접 검색
     - 맥락 맞춤 후속 질문 및 옵션 제시
+
+14. **Phase 14: 주체 감지 + 호텔명 제거 + 다턴 맥락 개선** (`rag/graph.py`)
+    - 주체(entity) 감지 시 명확화 건너뜀 → 바로 검색 ("스타벅스 위치 알려줘" → 직접 검색)
+    - 원본 쿼리 기반 모호성 판단 (LLM 재작성이 주입한 키워드 무시)
+    - `_stripHotelName`: 검색 쿼리에서 호텔명 제거 (벡터 임베딩 왜곡 방지)
+    - `_extractConversationTopic`: user 메시지만 역순 분석 (봇 답변 노이즈 제거)
+    - `_extractSubjectEntity`: 모호 키워드 제거 후 주체 추출
 
 ### 프로젝트 문서
 

@@ -44,6 +44,7 @@ class RAGState(TypedDict):
     clarification_question: str  # 사용자에게 되물을 질문
     clarification_options: list[str]  # 선택지 목록
     clarification_type: Optional[str]  # 명확화 타입 (시간/가격/예약/위치/반려동물/어린이)
+    clarification_subject: Optional[str]  # 추출된 주체 엔티티 (예: "스타벅스")
 
     # 검색 결과
     retrieved_chunks: list[dict]
@@ -693,6 +694,10 @@ class RAGGraph:
         - direct_triggers가 있으면 바로 검색 (질문형인 경우)
         - 없으면 맥락 맞춤 옵션 제시
         """
+        # 모호성 판단은 원본 쿼리 기준 (LLM 재작성이 추가한 키워드 무시)
+        originalQuery = state.get("query", "").strip()
+        originalQueryLower = originalQuery.lower()
+        # 맥락 감지/구체적 대상 체크는 재작성 쿼리 (맥락 보강 상태)
         query = state.get("normalized_query") or state.get("rewritten_query") or state["query"]
         queryLower = query.lower()
         hotel = state.get("detected_hotel")
@@ -773,7 +778,9 @@ class RAGGraph:
             }
 
         # ========================================
-        # 기존 로직: 모호한 패턴 검사
+        # Phase 14: 모호한 패턴 검사 (원본 쿼리 기준)
+        # 원칙: 주체(entity)가 있으면 모호하지 않음 → 검색으로 진행
+        #       주체가 없을 때만 명확화 질문 (예: "시간이 어떻게 돼?")
         # ========================================
         needsClarification = False
         clarificationQuestion = ""
@@ -783,32 +790,48 @@ class RAGGraph:
             keywords = patternInfo["keywords"]
             excludes = patternInfo.get("excludes", [])
 
-            # 제외 패턴 체크 (명확한 질문)
+            # 제외 패턴 체크 (원본 + 재작성 쿼리 모두)
+            if any(exc in originalQueryLower for exc in excludes):
+                continue
             if any(exc in queryLower for exc in excludes):
                 continue
 
-            # 모호한 키워드 매칭
-            if any(kw in queryLower for kw in keywords):
-                needsClarification = True
-                clarificationQuestion = patternInfo["question"]
-                clarificationOptions = patternInfo["options"]
+            # ★ 원본 쿼리에서 모호 키워드 매칭 (LLM 재작성 결과 무시)
+            matchedKeywords = [kw for kw in keywords if kw in originalQueryLower]
 
-                # 호텔명 추가
-                if hotelName:
-                    clarificationQuestion = f"[{hotelName}] {clarificationQuestion}"
+            if matchedKeywords:
+                # ★ 주체 추출: 모호 키워드 제거 후 남는 엔티티
+                subjectEntity = self._extractSubjectEntity(originalQuery, matchedKeywords)
 
-                print(f"[명확화 필요] '{query}' → {clarificationQuestion}")
-                break
+                if subjectEntity:
+                    # 주체가 있음 → 모호하지 않음 → 명확화 불필요, 바로 검색
+                    # 예: "스타벅스 위치 알려줘" → 스타벅스 검색 → 결과 반환 또는 "확인 어렵습니다"
+                    print(f"[주체 감지] '{originalQuery}' → 주체: '{subjectEntity}', 명확화 건너뜀 → 검색 진행")
+                    return {
+                        **state,
+                        "needs_clarification": False,
+                        "clarification_question": "",
+                        "clarification_options": [],
+                    }
+                else:
+                    # 주체 없음 → 진짜 모호 → 기존 일반 질문
+                    needsClarification = True
+                    clarificationQuestion = patternInfo["question"]
+                    clarificationOptions = patternInfo["options"]
+
+                    if hotelName:
+                        clarificationQuestion = f"[{hotelName}] {clarificationQuestion}"
+
+                    print(f"[일반 명확화] '{originalQuery}' → {clarificationQuestion}")
+                    break
 
         if needsClarification:
-            # 명확화 질문을 final_answer로 설정
             return {
                 **state,
                 "needs_clarification": True,
                 "clarification_question": clarificationQuestion,
                 "clarification_options": clarificationOptions,
-                "clarification_type": patternKey,  # "시간", "가격", "예약", "위치"
-                # 명확화 시 바로 응답하기 위한 필드 설정
+                "clarification_type": patternKey,
                 "evidence_passed": True,
                 "final_answer": clarificationQuestion,
             }
@@ -1308,6 +1331,44 @@ class RAGGraph:
             return query
 
         return stripped
+
+    def _extractSubjectEntity(self, query: str, ambiguousKeywords: list[str]) -> Optional[str]:
+        """모호한 질문에서 주체 엔티티 추출.
+        모호 키워드와 조사를 제거한 뒤 남는 2글자 이상 단어를 주체로 반환.
+        예: "스타벅스 어디야?" → 주체: "스타벅스"
+        """
+        subject = query.lower()
+
+        # 모호 키워드 제거
+        for kw in ambiguousKeywords:
+            subject = subject.replace(kw.lower(), "")
+
+        # 조사/어미 제거
+        subject = re.sub(
+            r'(에서|인가요|나요|은|는|이|가|의|에|를|을|도|만|야|요|까|어요|해|돼|되)',
+            '', subject
+        )
+        # 특수문자/공백 정리
+        subject = re.sub(r'[?!.,~\s]+', ' ', subject).strip()
+
+        # 일반어/동작어 필터 (주체가 아닌 단어)
+        genericWords = {
+            # 일반 명사
+            "운영", "이용", "시설", "서비스", "정보", "안내", "문의",
+            "호텔", "여기", "거기", "저기", "뭐", "무엇", "어떻게", "얼마",
+            "그것", "이것", "그거", "이거", "좀", "혹시", "그런데",
+            # 동작어 (주체가 아닌 서술어)
+            "알려줘", "알려", "해줘", "보여줘", "말해줘", "찾아줘", "가르쳐줘",
+            "알고", "싶어", "싶어요", "싶은데", "궁금", "궁금해", "있나",
+            "없나", "하고", "싶다", "있어", "없어", "될까", "되나",
+        }
+
+        words = [w for w in subject.split() if len(w) >= 2 and w not in genericWords]
+
+        if words:
+            return max(words, key=len)  # 가장 긴 단어 = 가장 구체적
+
+        return None
 
     def _expandQuery(self, query: str) -> str:
         """쿼리 확장 (동의어 추가)"""
@@ -1966,8 +2027,10 @@ class RAGGraph:
             "score": result["top_score"],
             # 명확화 관련 필드
             "needs_clarification": result.get("needs_clarification", False),
+            "clarification_question": result.get("clarification_question", ""),
             "clarification_options": result.get("clarification_options", []),
             "clarification_type": result.get("clarification_type"),
+            "clarification_subject": result.get("clarification_subject"),
             "original_query": query,  # 명확화 트리거된 원본 질문
         }
 
