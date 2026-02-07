@@ -1,0 +1,37 @@
+[
+  {
+    "hotel": "josun_palace",
+    "hotel_name": "조선 팰리스",
+    "category": "연락처",
+    "url": "https://jpg.josunhotel.com/policy/hotel.do",
+    "text": "Q: 조선 팰리스 대표번호(연락처)가 어떻게 되나요?\nA: 조선 팰리스의 대표 전화번호는 02-727-7200입니다.\n\n주소: 서울특별시 중구 소공로 106\n대표전화: 02-727-7200\n팩스: 02-727-7230\n홈페이지: https://jpg.josunhotel.com"
+  },
+  {
+    "hotel": "grand_josun_busan",
+    "hotel_name": "그랜드 조선 부산",
+    "category": "연락처",
+    "url": "https://gjb.josunhotel.com/policy/hotel.do",
+    "text": "Q: 그랜드 조선 부산 대표번호(연락처)가 어떻게 되나요?\nA: 그랜드 조선 부산의 대표 전화번호는 051-922-5000입니다.\n\n주소: 부산광역시 해운대구 해운대해변로 292\n대표전화: 051-922-5000\n홈페이지: https://gjb.josunhotel.com"
+  },
+  {
+    "hotel": "grand_josun_jeju",
+    "hotel_name": "그랜드 조선 제주",
+    "category": "연락처",
+    "url": "https://gjj.josunhotel.com/policy/hotel.do",
+    "text": "Q: 그랜드 조선 제주 대표번호(연락처)가 어떻게 되나요?\nA: 그랜드 조선 제주의 대표 전화번호는 064-735-8000입니다.\n\n주소: 제주특별자치도 서귀포시 중문관광로72번길 60\n대표전화: 064-735-8000\n예약 문의: 064-738-6600\n홈페이지: https://gjj.josunhotel.com"
+  },
+  {
+    "hotel": "lescape",
+    "hotel_name": "레스케이프",
+    "category": "연락처",
+    "url": "https://les.josunhotel.com/policy/hotel.do",
+    "text": "Q: 레스케이프 대표번호(연락처)가 어떻게 되나요?\nA: 레스케이프의 대표 전화번호는 02-317-4000입니다.\n\n주소: 서울특별시 중구 퇴계로 67\n대표전화: 02-317-4000\n홈페이지: https://les.josunhotel.com"
+  },
+  {
+    "hotel": "gravity_pangyo",
+    "hotel_name": "그래비티 판교",
+    "category": "연락처",
+    "url": "https://grp.josunhotel.com/policy/hotel.do",
+    "text": "Q: 그래비티 판교 대표번호(연락처)가 어떻게 되나요?\nA: 그래비티 판교의 대표 전화번호는 031-539-4800입니다.\n\n주소: 경기도 성남시 분당구 판교역로 10\n대표전화: 031-539-4800\n홈페이지: https://grp.josunhotel.com"
+  }
+]

@@ -1,12 +1,14 @@
 """
 FastAPI 기반 RAG 챗봇 서버
-- CORS 허용 (로컬 개발용)
+- CORS 도메인 제한 (환경변수 ALLOWED_ORIGINS)
 - POST /chat 엔드포인트
 - 정적 파일 제공 (UI)
+- 헬스 체크 (LLM/Chroma/세션 상태)
 """
 
 import os
 import sys
+import traceback
 from pathlib import Path
 
 # 프로젝트 루트를 path에 추가
@@ -26,14 +28,18 @@ from rag.graph import createRAGGraph
 # 환경변수에서 포트 가져오기 (Render 호환)
 PORT = int(os.getenv("PORT", 8000))
 
+# CORS 허용 도메인 (환경변수 ALLOWED_ORIGINS 설정 시 제한, 미설정 시 전체 허용)
+_envOrigins = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = _envOrigins.split(",") if _envOrigins else ["*"]
+
 app = FastAPI(title="Josun Hotel 챗봇 API")
 
-# CORS 설정 (로컬 개발용)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True if ALLOWED_ORIGINS != ["*"] else False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -69,8 +75,38 @@ class ChatResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    """헬스 체크"""
-    return {"status": "ok"}
+    """헬스 체크 (LLM/Chroma/세션 상태 포함)"""
+    status = {"status": "ok"}
+
+    # LLM 상태 확인
+    try:
+        from rag.llm_provider import checkLLMAvailable
+        llmOk, llmProvider = checkLLMAvailable()
+        status["llm"] = {"available": llmOk, "provider": llmProvider}
+    except Exception:
+        status["llm"] = {"available": False, "provider": "error"}
+
+    # Chroma 상태 확인
+    try:
+        rag = getRagGraph()
+        chunkCount = rag.collection.count() if hasattr(rag, 'collection') else -1
+        status["chroma"] = {"available": True, "chunks": chunkCount}
+    except Exception:
+        status["chroma"] = {"available": False, "chunks": 0}
+
+    # 세션 상태 확인
+    try:
+        from rag.session import sessionStore
+        sessionCount = len(sessionStore._sessions)
+        status["sessions"] = {"active": sessionCount, "max": sessionStore.MAX_SESSIONS}
+    except Exception:
+        status["sessions"] = {"active": 0, "max": 0}
+
+    # 전체 상태 판정
+    if not status.get("llm", {}).get("available") or not status.get("chroma", {}).get("available"):
+        status["status"] = "degraded"
+
+    return status
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -101,8 +137,13 @@ async def chat(request: ChatRequest):
             sessionId=sessionCtx.session_id,
         )
     except Exception as e:
+        # 내부 에러 상세는 서버 로그에만 기록, 클라이언트에는 일반 메시지
         print(f"[에러] {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail="요청을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+        )
 
 
 # 정적 파일 제공 (UI)
@@ -134,5 +175,6 @@ if __name__ == "__main__":
     print("=" * 50)
     print("Josun Hotel 챗봇 서버 시작")
     print(f"포트: {PORT}")
+    print(f"CORS 허용: {ALLOWED_ORIGINS}")
     print("=" * 50)
     uvicorn.run(app, host="0.0.0.0", port=PORT)

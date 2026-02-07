@@ -262,8 +262,17 @@ class RAGEvaluator:
             "results": [asdict(r) for r in self.results]
         }
 
+        # numpy bool/int 등 JSON 직렬화 호환 처리
+        class SafeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, bool):
+                    return bool(obj)
+                if hasattr(obj, 'item'):
+                    return obj.item()
+                return super().default(obj)
+
         with open(outputPath, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
+            json.dump(report, f, ensure_ascii=False, indent=2, cls=SafeEncoder)
 
         print(f"\n[저장] 보고서 → {outputPath}")
         return outputPath

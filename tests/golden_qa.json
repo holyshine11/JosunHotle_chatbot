@@ -233,7 +233,7 @@
       "query": "그랜드 조선 제주 연락처",
       "hotel": "grand_josun_jeju",
       "category": "연락처",
-      "expected_keywords": ["064-735-8000", "735-8000"],
+      "expected_keywords": ["064-735-8000", "735-8000", "064-738-6600", "738-6600"],
       "forbidden_keywords": ["부산", "팰리스"],
       "min_score": 0.65
     },

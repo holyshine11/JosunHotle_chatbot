@@ -63,7 +63,7 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 
 ## 고도화 진행 현황 (2026-02-07)
 
-### 현재 상태: 정확도 96% (48/50 테스트 통과)
+### 현재 상태: 정확도 100% (50/50) + 멀티턴 100% (22/22)
 
 | Phase | 내용 | 결과 |
 |-------|------|------|
@@ -80,7 +80,9 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 | 11 | 반려동물 정책 할루시네이션 수정 | ✅ |
 | 12 | 모호한 질문 의도 파악 개선 | ✅ |
 | 13 | 맥락 인식 명확화 시스템 | **96%** |
-| 14 | 주체 감지 + 호텔명 제거 + 다턴 맥락 개선 | **96%** |
+| 14 | 주체 감지 + 호텔명 제거 + 다턴 맥락 개선 | **100%** |
+| S1 | 보안/안정성 긴급 패치 (CORS, timeout, health) | ✅ |
+| S2 | 연락처 데이터 보충 + 멀티턴 테스트 자동화 | **100%** |
 
 ### 주요 구현 내용
 
@@ -186,11 +188,15 @@ python monitor/collector.py --save
 
 # 보충 데이터 인덱싱
 python pipeline/index_supplementary.py
+
+# 멀티턴 시나리오 테스트 (6개 시나리오, 22턴)
+python tests/test_multiturn.py --save
+python tests/test_multiturn.py --scenario 1 --verbose  # 특정 시나리오
 ```
 
 ### 데이터 현황
 
-- **총 청크**: 373개 (기존 359 + 보충 14)
+- **총 청크**: 378개 (기존 359 + 보충 19)
 - **호텔**: 조선 팰리스, 그랜드 조선 부산/제주, 레스케이프, 그래비티 판교
 - **인덱스 경로**: `data/index/chroma/`, `data/index/bm25_index.pkl`
 
