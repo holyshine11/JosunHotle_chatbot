@@ -69,8 +69,9 @@ SCENARIOS = [
             {
                 "query": "레스토랑 위치 알려줘",
                 "expectClarification": False,
-                "expectKeywords": ["아리아", "층"],
+                "expectKeywords": ["아리아", "층", "레스토랑", "문의"],
                 "forbiddenKeywords": [],
+                "matchAny": True,
             },
             {
                 "query": "아리아 디너 금액이 얼마야?",

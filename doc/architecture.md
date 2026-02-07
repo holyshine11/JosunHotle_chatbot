@@ -50,6 +50,8 @@ josun_chatbot/
 |------|------|
 | `josun_crawler.py` | 조선호텔 통합 크롤러 |
 | `deep_crawler.py` | 심층 크롤링 (상세 페이지) |
+| `crawl_complete.py` | 전체 페이지 크롤링 (152개 URL) |
+| `crawl_api.py` | JSON API 크롤러 (패키지/이벤트/액티비티) |
 
 **수집 대상**: 조선 팰리스, 그랜드 조선 부산/제주, 레스케이프, 그래비티 판교
 
@@ -75,21 +77,22 @@ LangGraph 기반 RAG 플로우
 
 | 파일 | 설명 |
 |------|------|
-| `graph.py` | **메인 RAG 그래프** (7개 노드) |
+| `graph.py` | **메인 RAG 그래프** (9개 노드) |
 | `grounding.py` | Grounding Gate (문장 단위 검증) |
 | `server.py` | FastAPI 서버 |
 
-#### RAG 플로우 (7개 노드)
+#### RAG 플로우 (9개 노드)
 
 ```
-1. queryRewriteNode    # 대화 맥락 반영 쿼리 재작성
-2. preprocessNode      # 입력 정규화, 언어/호텔/카테고리 감지
-3. retrieveNode        # Vector + BM25 하이브리드 검색
-4. evidenceGateNode    # 근거 검증 (품질 확인)
-5. answerComposeNode   # LLM 답변 생성 (Ollama)
-6. answerVerifyNode    # 할루시네이션 검증 + 카테고리 오염 검사
-7. policyFilterNode    # 금지 주제/개인정보 필터링
-8. logNode             # 로깅
+1. queryRewriteNode       # 대화 맥락 반영 쿼리 재작성
+2. preprocessNode         # 입력 정규화, 언어/호텔/카테고리 감지
+3. clarificationCheckNode # 모호한 질문 명확화 (맥락 인식)
+4. retrieveNode           # Vector + BM25 하이브리드 검색 + 리랭킹
+5. evidenceGateNode       # 근거 검증 (품질 확인)
+6. answerComposeNode      # LLM 답변 생성 (Ollama)
+7. answerVerifyNode       # 할루시네이션 검증 + 카테고리 오염 검사
+8. policyFilterNode       # 금지 주제/개인정보 필터링
+9. logNode                # 로깅
 ```
 
 #### 핵심 클래스
@@ -108,7 +111,8 @@ LangGraph 기반 RAG 플로우
 | 파일 | 설명 |
 |------|------|
 | `evaluate.py` | **자동 평가 스크립트** (정확도 측정) |
-| `golden_qa.json` | 48개 골든 테스트 케이스 |
+| `golden_qa.json` | 50개 골든 테스트 케이스 |
+| `test_multiturn.py` | 멀티턴 시나리오 테스트 (6개 시나리오, 22턴) |
 | `test_grounding.py` | Grounding Gate 단위 테스트 |
 
 **실행 방법:**
@@ -160,7 +164,8 @@ python tests/test_grounding.py  # Grounding 테스트
 | `supplementary/` | 보충 데이터 |
 
 **데이터 현황:**
-- 총 청크: 373개 (기본 359 + 보충 14)
+- 총 청크: Chroma 648개, BM25 460개
+- 보충 데이터: 101개 (패키지 51, 이벤트 19, 액티비티 2, 반려동물 6, 연락처 5, 조식 1 등)
 - 호텔: 5개 (조선 팰리스, 부산, 제주, 레스케이프, 그래비티)
 
 ---

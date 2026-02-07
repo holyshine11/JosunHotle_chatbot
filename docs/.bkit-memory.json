@@ -1,35 +1,57 @@
 {
-  "sessionCount": 26,
+  "sessionCount": 35,
   "lastSession": {
-    "startedAt": "2026-02-07T01:24:54.415Z",
+    "startedAt": "2026-02-07T14:18:19.742Z",
     "platform": "claude",
     "level": "Dynamic"
   },
   "currentWork": {
     "feature": "rag",
     "phase": "do",
-    "lastPhase": 13,
-    "accuracy": "96.0%",
+    "lastPhase": 17,
+    "accuracy": "100.0%",
     "testCases": 50,
-    "passedTests": 48
+    "passedTests": 50,
+    "multiturnTests": 22,
+    "multiturnPassed": 22,
+    "matchRate": 95,
+    "chromaChunks": 648,
+    "bm25Chunks": 450,
+    "supplementaryData": 91
   },
   "completedPhases": [
     "Phase 9: UI 디자인 개선 (다크모드, 반응형)",
     "Phase 10: 소스 URL 미스매칭 수정",
     "Phase 11: 반려동물 정책 할루시네이션 수정",
     "Phase 12: 모호한 질문 의도 파악 개선",
-    "Phase 13: 맥락 인식 명확화 시스템"
+    "Phase 13: 맥락 인식 명확화 시스템",
+    "Phase 14: 주체 감지 + 호텔명 제거 + 다턴 맥락 개선",
+    "Phase 15: 리랭커 키워드 보호 + Evidence Gate 고도화",
+    "Phase 16: 명확화 루프 버그 수정 + 패키지 데이터 보충",
+    "Phase 17: JSON API 크롤러 + topScore 버그 수정",
+    "Gap분석: RED 5건 + YELLOW 3건 전부 수정 완료"
   ],
-  "failingTests": [
-    "dining_lescape_001",
-    "kids_jeju_001"
-  ],
+  "failingTests": [],
+  "lastAction": "갭 분석 RED/YELLOW 전부 수정 + 재인덱싱 + 회귀테스트 100% 확인",
+  "pendingPlan": "Phase 15 리랭커 고도화 플랜 (사우나 쿼리 개선) - golden-popping-patterson.md",
   "keyFiles": {
     "rag": "rag/graph.py",
+    "reranker": "rag/reranker.py",
     "grounding": "rag/grounding.py",
+    "server": "rag/server.py",
     "evaluate": "tests/evaluate.py",
     "testData": "tests/golden_qa.json",
+    "multiturn": "tests/test_multiturn.py",
     "ui": "ui/index.html",
-    "supplementary": "data/supplementary/"
-  }
+    "supplementary": "data/supplementary/",
+    "apiCrawler": "crawler/crawl_api.py",
+    "indexer": "pipeline/index_supplementary.py"
+  },
+  "nextCandidates": [
+    "Phase 15 리랭커 고도화 (사우나 쿼리 키워드 매칭 보완)",
+    "쿼리 확장 (동의어 사전)",
+    "답변 템플릿 (카테고리별 형식 통일)",
+    "다국어 지원 (영어/일본어)",
+    "PDCA 완료 보고서 생성 (/pdca report rag)"
+  ]
 }

@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-07T06:19:51.343Z",
+  "lastUpdated": "2026-02-07T14:19:29.982Z",
   "activeFeatures": [
     "rag",
     "tests",
@@ -8,22 +8,23 @@
     "josun_chatbot",
     "api",
     "scratchpad",
-    "state"
+    "state",
+    "crawler"
   ],
   "primaryFeature": "rag",
   "features": {
     "rag": {
       "phase": "do",
       "phaseNumber": 3,
-      "matchRate": null,
+      "matchRate": 93,
       "iterationCount": 0,
       "requirements": [],
       "documents": {},
       "timestamps": {
         "started": "2026-02-05T03:31:29.885Z",
-        "lastUpdated": "2026-02-07T06:19:51.343Z"
+        "lastUpdated": "2026-02-07T14:19:29.981Z"
       },
-      "lastFile": "/Users/Dev/josun_chatbot/rag/server.py"
+      "lastFile": "/Users/Dev/josun_chatbot/rag/graph.py"
     },
     "tests": {
       "phase": "do",
@@ -34,7 +35,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-05T03:32:43.319Z",
-        "lastUpdated": "2026-02-07T05:13:46.513Z"
+        "lastUpdated": "2026-02-07T12:27:54.386Z"
       },
       "lastFile": "/Users/Dev/josun_chatbot/tests/test_multiturn.py"
     },
@@ -102,6 +103,19 @@
         "lastUpdated": "2026-02-06T12:36:44.947Z"
       },
       "lastFile": "/Users/Dev/josun_chatbot/ui/js/state/store.js"
+    },
+    "crawler": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-07T13:45:23.534Z",
+        "lastUpdated": "2026-02-07T13:45:23.534Z"
+      },
+      "lastFile": "/Users/Dev/josun_chatbot/crawler/crawl_api.py"
     }
   },
   "pipeline": {
@@ -112,7 +126,7 @@
   "session": {
     "startedAt": "2026-02-05T02:34:37.244Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-07T06:19:51.343Z"
+    "lastActivity": "2026-02-07T14:19:29.982Z"
   },
   "history": [
     {
@@ -1119,6 +1133,108 @@
     },
     {
       "timestamp": "2026-02-07T06:19:51.343Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T11:55:17.547Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T11:55:21.815Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T11:55:31.879Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T11:55:42.366Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T11:58:58.034Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:11:16.056Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:11:29.889Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:11:40.127Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:27:54.386Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:54:46.458Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:55:18.905Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T12:55:33.257Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T13:00:25.406Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T13:45:23.534Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T13:48:09.562Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T14:19:28.554Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-07T14:19:29.982Z",
       "feature": "rag",
       "phase": "do",
       "action": "updated"

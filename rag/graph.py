@@ -158,7 +158,7 @@ class RAGGraph:
         "결제", "payment", "카드", "card", "현금", "cash", "계좌", "이체",
         "정책", "policy", "규정", "약관", "조건", "terms",
         "보증", "guarantee", "deposit", "디파짓", "선결제", "후결제",
-        "할인", "discount", "프로모션", "promotion", "이벤트", "event", "특가", "패키지", "package",
+        "할인", "discount", "프로모션", "promotion", "이벤트", "event", "특가", "패키지", "package", "액티비티", "activity",
         "멤버십", "membership", "포인트", "point", "적립", "마일리지", "mileage",
         "쿠폰", "coupon", "바우처", "voucher", "상품권", "기프트", "gift",
         "영수증", "receipt", "인보이스", "invoice", "세금계산서",
@@ -377,6 +377,15 @@ class RAGGraph:
             "미성년자", "반려동물가능", "휠체어", "배리어프리", "짐보관", "요청사항",
             "보호자", "동반가능"
         ],
+        "패키지": [
+            "패키지", "package", "프로모션", "promotion", "특가", "시즌", "기획"
+        ],
+        "이벤트": [
+            "이벤트", "event", "행사", "축제", "페스티벌", "시즌이벤트"
+        ],
+        "액티비티": [
+            "액티비티", "activity", "체험", "프로그램", "키즈프로그램", "어른프로그램"
+        ],
     }
 
     # 동의어 사전 (쿼리 확장용)
@@ -475,13 +484,30 @@ class RAGGraph:
         "반려동물": {
             "keywords": ["강아지", "반려견", "펫", "pet", "고양이", "동반", "데려", "대려", "반려동물", "애견"],
             # 아래 트리거가 있으면 직접 답변 (명확화 불필요)
-            "direct_triggers": ["가능", "돼", "되", "허용", "입장", "출입", "?", "할수", "할 수", "있어", "없어", "시간", "가격", "요금", "위치", "어디"],
+            "direct_triggers": [
+                "가능", "돼", "되", "허용", "입장", "출입", "?", "할수", "할 수", "있어", "없어",
+                "시간", "가격", "요금", "위치", "어디", "얼마",
+                # 정보 요청형 — 명확화 없이 바로 검색
+                "정책", "규정", "알려", "알려줘", "알고", "뭐야", "뭔가", "어때",
+                "투숙", "숙박", "객실", "방", "묵", "자",
+                "패키지", "프로모션", "혜택", "서비스",
+                "불가", "안돼", "안되", "제한", "금지",
+                "비용", "무게", "몸무게", "kg", "킬로",
+            ],
             "question": "반려동물을 데리고 어디를 이용하실 예정인가요?",
             "options": ["객실 투숙", "레스토랑/다이닝", "로비/공용시설", "전체 반려동물 정책"],
         },
         "어린이": {
             "keywords": ["아이", "아기", "어린이", "유아", "키즈", "애기", "아들", "딸"],
-            "direct_triggers": ["가능", "돼", "되", "허용", "입장", "?", "있어", "없어", "몇살", "몇 살", "시간", "가격", "요금", "위치", "어디"],
+            "direct_triggers": [
+                "가능", "돼", "되", "허용", "입장", "?", "있어", "없어", "몇살", "몇 살",
+                "시간", "가격", "요금", "위치", "어디", "얼마",
+                # 정보 요청형
+                "정책", "규정", "알려", "알려줘", "알고", "뭐야", "뭔가", "어때",
+                "투숙", "숙박", "객실", "방",
+                "패키지", "프로모션", "혜택", "서비스",
+                "수영", "풀", "키즈클럽",
+            ],
             "question": "어린이와 함께 어떤 시설을 이용하실 예정인가요?",
             "options": ["객실 투숙", "수영장", "키즈클럽", "레스토랑"],
         },
@@ -693,6 +719,10 @@ class RAGGraph:
         - 반려동물, 어린이 등 특정 맥락 감지 시 맥락 맞춤 후속 질문
         - direct_triggers가 있으면 바로 검색 (질문형인 경우)
         - 없으면 맥락 맞춤 옵션 제시
+
+        Phase 16: 명확화 루프 방지 + 구체적 대상 우선 체크
+        - 히스토리에서 이미 명확화가 발생한 맥락은 재명확화 차단
+        - 구체적 대상(시설, 정책 등)이 있으면 명확화보다 검색 우선
         """
         # 모호성 판단은 원본 쿼리 기준 (LLM 재작성이 추가한 키워드 무시)
         originalQuery = state.get("query", "").strip()
@@ -707,7 +737,62 @@ class RAGGraph:
         hotelName = hotelInfo.get("name", "")
 
         # ========================================
-        # Phase 13: 맥락 인식 명확화 (최우선)
+        # Phase 16-1: 명확화 루프 방지
+        # 히스토리에서 이미 동일 맥락 명확화가 발생했으면 바로 검색
+        # ========================================
+        history = state.get("history") or []
+        previousClarificationContexts = set()
+        for msg in history:
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                # 이전 명확화 응답에서 맥락 키워드 감지
+                for contextKey in self.CONTEXT_CLARIFICATION:
+                    contextInfo = self.CONTEXT_CLARIFICATION[contextKey]
+                    if contextInfo["question"] in content:
+                        previousClarificationContexts.add(contextKey)
+
+        if previousClarificationContexts:
+            print(f"[루프 방지] 이전 명확화 감지: {previousClarificationContexts}")
+            # 이미 명확화가 발생한 맥락이면 바로 검색 진행
+            for contextKey in previousClarificationContexts:
+                keywords = self.CONTEXT_CLARIFICATION[contextKey]["keywords"]
+                if any(kw in queryLower for kw in keywords):
+                    print(f"[루프 방지] '{query}' → {contextKey} 맥락 재명확화 차단, 직접 검색")
+                    return {
+                        **state,
+                        "needs_clarification": False,
+                        "clarification_question": "",
+                        "clarification_options": [],
+                        "detected_context": contextKey,
+                    }
+
+        # ========================================
+        # Phase 16-2: 구체적 대상이 명시된 맥락 질문은 바로 검색
+        # "반려동물 객실 투숙 정책" → 맥락(반려동물) + 구체적 대상(객실, 정책) → 검색
+        # ========================================
+        contextSpecificTargets = [
+            "객실", "방", "투숙", "숙박", "레스토랑", "다이닝", "로비",
+            "수영장", "풀", "피트니스", "스파", "사우나",
+            "정책", "규정", "패키지", "프로모션", "혜택",
+            "비용", "요금", "가격", "얼마", "무게", "kg", "킬로",
+        ]
+
+        for contextKey, contextInfo in self.CONTEXT_CLARIFICATION.items():
+            keywords = contextInfo["keywords"]
+            if any(kw in queryLower for kw in keywords):
+                # 맥락은 감지됨 — 추가로 구체적 대상도 있는지 확인
+                if any(target in queryLower for target in contextSpecificTargets):
+                    print(f"[맥락+구체적 대상] '{query}' → {contextKey} 맥락 + 구체적 대상, 직접 검색")
+                    return {
+                        **state,
+                        "needs_clarification": False,
+                        "clarification_question": "",
+                        "clarification_options": [],
+                        "detected_context": contextKey,
+                    }
+
+        # ========================================
+        # Phase 13: 맥락 인식 명확화 (맥락O + 구체적 대상X 일 때만)
         # ========================================
         for contextKey, contextInfo in self.CONTEXT_CLARIFICATION.items():
             keywords = contextInfo["keywords"]
@@ -763,7 +848,13 @@ class RAGGraph:
             # 다이닝 구체적
             "홍연", "아리아", "콘스탄스", "팔레",
             # 정책 관련 (명확한 질문)
-            "취소", "환불", "취소정책", "환불정책", "노쇼", "정책",
+            "취소", "환불", "취소정책", "환불정책", "노쇼", "정책", "규정",
+            # 투숙/숙박
+            "투숙", "숙박", "묵", "예약",
+            # 패키지/프로모션
+            "패키지", "프로모션", "혜택", "할인", "이벤트", "특가",
+            # 반려동물/어린이 구체적
+            "반려동물", "애견", "강아지", "펫", "어린이", "키즈클럽",
         ]
 
         # 질문에 이미 구체적인 대상이 있으면 명확화 불필요
@@ -1024,7 +1115,6 @@ class RAGGraph:
                         chunks=results,
                         topK=5
                     )
-                    # evidence_gate는 원본 하이브리드 점수 기준으로 동작
                     # 리랭킹은 순서/필터만 변경, 점수 기준은 original_score 유지
                     for chunk in results:
                         if "original_score" in chunk:
@@ -1032,8 +1122,8 @@ class RAGGraph:
             except Exception as e:
                 print(f"[리랭커 오류] {e}")
 
-        # 최고 점수 계산
-        topScore = results[0]["score"] if results else 0.0
+        # 최고 점수 계산: 리랭킹 후 순서가 바뀌므로 전체 결과 중 최고 점수 사용
+        topScore = max((r["score"] for r in results), default=0.0) if results else 0.0
 
         return {
             **state,
@@ -1457,7 +1547,7 @@ class RAGGraph:
     def _extractQueryKeywords(self, query: str) -> list[str]:
         """질문에서 핵심 키워드 추출"""
         # 반려동물/펫 관련 키워드
-        petKeywords = ["강아지", "반려견", "pet", "펫", "반려동물", "개", "애견", "고양이"]
+        petKeywords = ["강아지", "반려견", "pet", "펫", "반려동물", "애견", "고양이", "댕댕이"]
         # 주차 관련 키워드
         parkingKeywords = ["주차", "parking", "발렛", "valet", "파킹"]
         # 수영장 관련 키워드
@@ -1481,26 +1571,34 @@ class RAGGraph:
         return foundKeywords
 
     def _checkQueryContextRelevance(self, query: str, chunks: list) -> tuple[bool, str]:
-        """질문 핵심 키워드가 검색된 청크에 있는지 검증"""
+        """질문 핵심 키워드가 검색된 청크에 있는지 검증
+
+        Phase 16: 검증 범위 확대 + 관대한 매칭
+        - top 5 청크까지 검색 (기존 top 3)
+        - 카테고리 매칭 유연화
+        - 패키지 카테고리 포함
+        """
         queryKeywords = self._extractQueryKeywords(query)
 
         if not queryKeywords:
             # 핵심 키워드가 없으면 검증 통과 (일반 질문)
             return True, ""
 
-        # 청크 텍스트 결합
-        chunkTexts = " ".join([c.get("text", "") for c in chunks[:3]])
+        # 청크 텍스트 결합 (top 5로 확대)
+        chunkTexts = " ".join([c.get("text", "") for c in chunks[:5]])
         chunkTextsLower = chunkTexts.lower()
 
-        # 카테고리 메타데이터도 확인
-        chunkCategories = [c.get("metadata", {}).get("category", "").lower() for c in chunks[:3]]
+        # 카테고리 메타데이터도 확인 (top 5)
+        chunkCategories = [c.get("metadata", {}).get("category", "").lower() for c in chunks[:5]]
+        # page_type도 확인
+        chunkPageTypes = [c.get("metadata", {}).get("page_type", "").lower() for c in chunks[:5]]
 
         # 카테고리별 확장 키워드 (검색 범위 확대)
         categoryKeywordMap = {
-            "반려동물": ["반려", "pet", "펫", "강아지", "dog", "애견", "소형견", "반려견", "동물", "salon"],
-            "주차": ["주차", "parking", "발렛", "valet", "파킹"],
-            "수영장": ["수영", "pool", "풀", "swimming", "인피니티"],
-            "조식": ["조식", "breakfast", "아침", "뷔페", "dining"],
+            "반려동물": ["반려", "pet", "펫", "강아지", "dog", "애견", "소형견", "반려견", "동물", "salon", "패키지", "불가", "동반"],
+            "주차": ["주차", "parking", "발렛", "valet", "파킹", "차량", "주차장"],
+            "수영장": ["수영", "pool", "풀", "swimming", "인피니티", "워터"],
+            "조식": ["조식", "breakfast", "아침", "뷔페", "dining", "식사", "레스토랑"],
         }
 
         # 동의어 포함하여 매칭 검사
@@ -1513,6 +1611,13 @@ class RAGGraph:
                     keywordFound = True
                     break
 
+            # page_type에서 매칭 (패키지 등)
+            if not keywordFound:
+                for pt in chunkPageTypes:
+                    if keyword in pt or "package" in pt:
+                        keywordFound = True
+                        break
+
             # 텍스트에서 확장 키워드 매칭
             if not keywordFound:
                 expandedKeywords = categoryKeywordMap.get(keyword, [keyword])
@@ -1522,7 +1627,10 @@ class RAGGraph:
                         break
 
             if not keywordFound:
-                return False, f"질문의 '{keyword}' 관련 정보가 검색 결과에 없습니다."
+                print(f"[관련성 검증] '{keyword}' 관련 정보 미발견 — 하지만 검색 결과가 있으므로 진행")
+                # 검색 결과가 존재하면 차단하지 않고 경고만 (Phase 16)
+                # 이전: 즉시 차단 → 변경: 로그만 남기고 통과
+                # return False, f"질문의 '{keyword}' 관련 정보가 검색 결과에 없습니다."
 
         return True, ""
 

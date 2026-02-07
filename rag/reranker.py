@@ -5,6 +5,7 @@ Cross-Encoder 기반 리랭커 (transformers 직접 사용)
 - Lazy loading (첫 검색 시 모델 로드)
 """
 
+import re
 import time
 import numpy as np
 
@@ -17,8 +18,8 @@ class Reranker:
 
     # 리랭킹 설정
     MIN_KEEP = 2  # 최소 유지 청크 수
-    # 최고 점수 대비 상대 임계값 (최고 점수의 40% 미만은 제거)
-    RELATIVE_THRESHOLD = 0.4
+    # 최고 점수 대비 상대 임계값 (최고 점수의 35% 미만은 제거)
+    RELATIVE_THRESHOLD = 0.35
 
     def __init__(self, modelName: str = None, device: str = "cpu"):
         self.modelName = modelName or self.DEFAULT_MODEL
@@ -121,13 +122,21 @@ class Reranker:
         # 리랭크 점수 기준 정렬
         scoredChunks.sort(key=lambda x: x["rerank_score"], reverse=True)
 
-        # 상대 임계값 필터링 (최고 점수 대비)
+        # 상대 임계값 필터링 (최고 점수 대비) + 쿼리 키워드 매칭
         topRerankScore = scoredChunks[0]["rerank_score"] if scoredChunks else 0
         relativeThreshold = topRerankScore * self.RELATIVE_THRESHOLD
+        queryKeywords = self._extractQueryKeywords(query)
 
         filtered = []
         for chunk in scoredChunks:
-            if chunk["rerank_score"] >= relativeThreshold or len(filtered) < self.MIN_KEEP:
+            keepByScore = chunk["rerank_score"] >= relativeThreshold
+            keepByMinKeep = len(filtered) < self.MIN_KEEP
+            keepByKeyword = (not keepByScore and not keepByMinKeep
+                             and self._hasQueryKeyword(chunk, queryKeywords))
+
+            if keepByScore or keepByMinKeep or keepByKeyword:
+                if keepByKeyword:
+                    chunk["_kept_by_keyword"] = True
                 filtered.append(chunk)
 
         result = filtered[:topK]
@@ -137,10 +146,36 @@ class Reranker:
         if removed > 0:
             print(f"[리랭커] {removed}개 저관련 청크 제거")
         for chunk in scoredChunks:
-            status = "O" if chunk in result else "X"
+            if chunk in result:
+                status = "K" if chunk.get("_kept_by_keyword") else "O"
+            else:
+                status = "X"
             print(f"  [{status}] rerank={chunk['rerank_score']:.3f} raw={chunk['rerank_raw']:.2f} orig={chunk['original_score']:.3f} | {chunk['text'][:60]}...")
 
         return result
+
+    def _extractQueryKeywords(self, query: str) -> list[str]:
+        """쿼리에서 2글자 이상 한글 핵심 키워드 추출 (조사/일반어 제거)"""
+        # 먼저 단어 추출 (한글 2글자 이상)
+        words = re.findall(r'[가-힣]{2,}', query)
+        # 각 단어 끝의 조사만 제거 (단어 중간 글자 보호)
+        suffixes = r'(에서|에는|에도|해줘|해요|인가요|인지|입니까|할까|인데|하고|해도|대해|관해|은|는|이|가|을|를|의|도|만|에|로|으로)$'
+        cleaned = []
+        for w in words:
+            w = re.sub(suffixes, '', w)
+            if len(w) >= 2:
+                cleaned.append(w)
+        stopwords = {"어떻게", "언제", "어디", "무엇", "얼마", "여기", "거기",
+                     "호텔", "정보", "안내", "문의", "운영", "이용", "서비스",
+                     "레스토랑", "객실", "시설", "소개", "가능", "알려줘"}
+        return [w for w in cleaned if w not in stopwords]
+
+    def _hasQueryKeyword(self, chunk: dict, queryKeywords: list[str]) -> bool:
+        """청크 텍스트에 쿼리 핵심 키워드가 포함되어 있는지 확인"""
+        if not queryKeywords:
+            return False
+        chunkText = chunk.get("text", "").lower()
+        return any(kw.lower() in chunkText for kw in queryKeywords)
 
     @property
     def isAvailable(self) -> bool:

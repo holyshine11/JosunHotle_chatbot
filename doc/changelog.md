@@ -1,6 +1,80 @@
 # 개발 진행 내역 (Changelog)
 
-> 마지막 업데이트: 2026-02-06
+> 마지막 업데이트: 2026-02-07
+
+---
+
+## Phase 17: JSON API 크롤러 + dining_gravity_001 수정 (2026-02-07)
+
+### 변경 사항
+
+#### 1. JSON API 크롤러 신규 구현 (`crawler/crawl_api.py`)
+
+정적 크롤러(crawl_complete.py)가 수집하지 못하는 동적 콘텐츠를 REST API로 직접 수집.
+
+| 엔드포인트 | 수집량 | 대상 호텔 |
+|-----------|--------|----------|
+| `/package/list.json` | 51개 패키지 | 5개 전체 |
+| `/event/list.json` | 19개 이벤트 | 5개 전체 |
+| `/activity/listJson.json` | 2개 액티비티 | 제주만 |
+
+- 만료된 패키지/이벤트 자동 필터링
+- 페이지네이션 지원 (패키지)
+- Q&A 형식으로 변환 후 `data/supplementary/`에 저장
+
+#### 2. topScore 버그 수정 (`rag/graph.py:1117`)
+
+**문제**: 리랭킹 후 `results[0]["score"]`가 리랭크 1등의 원본 점수를 반환 → 원본 검색에서 낮은 점수(0.648)였던 청크가 1등이 되면 Evidence Gate(0.65) 미달
+
+**수정**: `topScore = max(r["score"] for r in results)` → 전체 결과 중 최고 원본 점수 사용
+
+#### 3. 인덱스 업데이트
+
+- Chroma: 568 → 648개 (+80 보충 데이터)
+- BM25: 460개 재구축
+- `data/supplementary/package_info.json`: 6개 → 51개 (실제 API 데이터)
+- `data/supplementary/event_info.json`: 19개 (신규)
+- `data/supplementary/activity_info.json`: 2개 (신규, 중복 제거)
+
+#### 4. CATEGORY_KEYWORDS 보강
+
+- "패키지", "이벤트/프로모션", "액티비티" 카테고리 추가
+- VALID_QUERY_KEYWORDS에 "액티비티" 키워드 추가
+
+### 테스트 결과
+
+- Golden QA: **50/50 (100%)**
+- 멀티턴: **22/22 (100%)**
+- dining_gravity_001: 실패 → 통과
+
+---
+
+## Phase 15-16: 리랭커 고도화 + 버그 수정 (2026-02-07)
+
+### Phase 15: 리랭커 키워드 보호
+
+- `RELATIVE_THRESHOLD`: 0.4 → 0.35 (필터링 완화)
+- `_extractQueryKeywords()`: 쿼리에서 핵심 키워드 추출
+- `_hasQueryKeyword()`: 키워드 매칭 청크는 점수 무관 유지
+- 사우나 쿼리에서 관련 청크 3개 탈락 방지
+
+### Phase 16: 명확화 루프 방지 + 패키지 데이터 보충
+
+- `direct_triggers` 26+ 키워드 확장 (반려동물, 어린이 맥락)
+- 히스토리 기반 명확화 루프 차단
+- 맥락+구체적 대상 조합 → 명확화 우회
+- `_checkQueryContextRelevance` 차단 → 로그 전용으로 변경
+
+### Phase 14: 주체 감지 + 호텔명 제거 + 다턴 맥락 개선
+
+- `_stripHotelName`: 검색 쿼리에서 호텔명 제거 (임베딩 왜곡 방지)
+- `_extractSubjectEntity`: 주체 감지 시 명확화 건너뜀
+- `_extractConversationTopic`: user 메시지만 역순 분석
+
+### 테스트 결과
+
+- Phase 14: **100%** (50/50) + 멀티턴 **100%** (22/22)
+- Phase 16: **98%** (49/50) — dining_gravity_001만 실패
 
 ---
 

@@ -83,11 +83,14 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
 | 14 | 주체 감지 + 호텔명 제거 + 다턴 맥락 개선 | **100%** |
 | S1 | 보안/안정성 긴급 패치 (CORS, timeout, health) | ✅ |
 | S2 | 연락처 데이터 보충 + 멀티턴 테스트 자동화 | **100%** |
+| 15 | 리랭커 키워드 보호 + Evidence Gate 고도화 | **100%** |
+| 16 | 명확화 루프 버그 수정 + 패키지 데이터 보충 | **100%** |
+| 17 | JSON API 크롤러 + topScore 버그 수정 | **100%** |
 
 ### 주요 구현 내용
 
 1. **자동 평가 시스템** (`tests/evaluate.py`, `tests/golden_qa.json`)
-   - 48개 테스트 케이스 (5개 호텔, 12개 카테고리)
+   - 50개 테스트 케이스 (5개 호텔, 12개 카테고리)
    - 키워드 기반 정확도 측정, 할루시네이션 감지
 
 2. **BM25 하이브리드 검색** (`pipeline/indexer.py`)
@@ -154,6 +157,20 @@ Crawler → Cleaner/Normalizer → Chunker → Indexer(Embedding + VectorDB) →
     - `_extractConversationTopic`: user 메시지만 역순 분석 (봇 답변 노이즈 제거)
     - `_extractSubjectEntity`: 모호 키워드 제거 후 주체 추출
 
+15. **Phase 15: 리랭커 키워드 보호** (`rag/reranker.py`)
+    - 쿼리 키워드가 포함된 청크는 리랭크 점수와 무관하게 유지
+    - `RELATIVE_THRESHOLD` 0.4 → 0.35로 완화
+    - `_extractQueryKeywords`, `_hasQueryKeyword` 헬퍼 추가
+
+16. **Phase 16: 명확화 루프 버그 수정** (`rag/graph.py`)
+    - 명확화 응답 후 재질문 루프 방지
+    - 패키지 데이터 보충 (6개 수동 → 51개 API 소싱)
+
+17. **Phase 17: JSON API 크롤러** (`crawler/crawl_api.py`)
+    - 호텔 REST API에서 패키지/이벤트/액티비티 자동 수집
+    - topScore 계산 버그 수정 (`results[0]["score"]` → `max()`)
+    - 보충 데이터: 패키지 51, 이벤트 19, 액티비티 2
+
 ### 프로젝트 문서
 
 - `doc/changelog.md` - 개발 진행 내역
@@ -196,7 +213,8 @@ python tests/test_multiturn.py --scenario 1 --verbose  # 특정 시나리오
 
 ### 데이터 현황
 
-- **총 청크**: 378개 (기존 359 + 보충 19)
+- **총 청크**: Chroma 648개, BM25 460개
+- **보충 데이터**: 101개 (패키지 51, 이벤트 19, 액티비티 2, 반려동물 6, 연락처 5, 조식 1 등)
 - **호텔**: 조선 팰리스, 그랜드 조선 부산/제주, 레스케이프, 그래비티 판교
 - **인덱스 경로**: `data/index/chroma/`, `data/index/bm25_index.pkl`
 
