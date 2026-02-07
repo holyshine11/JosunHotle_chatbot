@@ -7,7 +7,7 @@
   },
   "currentWork": {
     "feature": "rag",
-    "phase": "do",
+    "phase": "completed",
     "lastPhase": 17,
     "accuracy": "100.0%",
     "testCases": 50,
@@ -29,11 +29,12 @@
     "Phase 15: 리랭커 키워드 보호 + Evidence Gate 고도화",
     "Phase 16: 명확화 루프 버그 수정 + 패키지 데이터 보충",
     "Phase 17: JSON API 크롤러 + topScore 버그 수정",
-    "Gap분석: RED 5건 + YELLOW 3건 전부 수정 완료"
+    "Gap분석: RED 5건 + YELLOW 3건 전부 수정 완료",
+    "PDCA 완료 보고서 생성"
   ],
   "failingTests": [],
-  "lastAction": "갭 분석 RED/YELLOW 전부 수정 + 재인덱싱 + 회귀테스트 100% 확인",
-  "pendingPlan": "Phase 15 리랭커 고도화 플랜 (사우나 쿼리 개선) - golden-popping-patterson.md",
+  "lastAction": "PDCA 완료 보고서 생성 (docs/04-report/features/rag.report.md)",
+  "reportPath": "docs/04-report/features/rag.report.md",
   "keyFiles": {
     "rag": "rag/graph.py",
     "reranker": "rag/reranker.py",
@@ -48,10 +49,10 @@
     "indexer": "pipeline/index_supplementary.py"
   },
   "nextCandidates": [
-    "Phase 15 리랭커 고도화 (사우나 쿼리 키워드 매칭 보완)",
+    "코드 리팩토링 (graph.py 1,665줄 분리)",
+    "Docker 컨테이너화",
     "쿼리 확장 (동의어 사전)",
     "답변 템플릿 (카테고리별 형식 통일)",
-    "다국어 지원 (영어/일본어)",
-    "PDCA 완료 보고서 생성 (/pdca report rag)"
+    "다국어 지원 (영어/일본어)"
   ]
 }
