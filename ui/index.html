@@ -150,7 +150,7 @@
 
     // ========== API 설정 ==========
     // 로컬: localhost:8000, 배포: 같은 도메인 사용
-    const API_BASE_URL = window.location.hostname === 'localhost'
+    const API_BASE_URL = (window.location.port !== '8000')
       ? 'http://localhost:8000'
       : '';
 
