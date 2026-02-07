@@ -53,6 +53,7 @@ class ChatRequest(BaseModel):
     hotelId: str
     message: str
     history: Optional[List[dict]] = None
+    sessionId: Optional[str] = None  # 세션 ID (없으면 자동 생성)
 
 
 class ChatResponse(BaseModel):
@@ -61,6 +62,9 @@ class ChatResponse(BaseModel):
     sources: Optional[List[str]] = None
     needsClarification: Optional[bool] = False  # 명확화 필요 여부
     clarificationOptions: Optional[List[str]] = None  # 선택지 목록
+    clarificationType: Optional[str] = None  # 명확화 타입 (시간/가격/예약/위치/반려동물/어린이)
+    originalQuery: Optional[str] = None  # 명확화 트리거된 원본 질문
+    sessionId: Optional[str] = None  # 세션 ID 반환
 
 
 @app.get("/health")
@@ -73,11 +77,17 @@ async def health():
 async def chat(request: ChatRequest):
     """채팅 엔드포인트"""
     try:
+        from rag.session import sessionStore
+
+        # 세션 컨텍스트 조회/생성
+        sessionCtx = sessionStore.getOrCreate(request.sessionId)
+
         rag = getRagGraph()
         result = rag.chat(
             query=request.message,
             hotel=request.hotelId,
-            history=request.history  # 대화 히스토리 전달
+            history=request.history,
+            sessionCtx=sessionCtx  # 세션 컨텍스트 전달
         )
 
         return ChatResponse(
@@ -85,7 +95,10 @@ async def chat(request: ChatRequest):
             score=result.get("score"),
             sources=result.get("sources", []),
             needsClarification=result.get("needs_clarification", False),
-            clarificationOptions=result.get("clarification_options", [])
+            clarificationOptions=result.get("clarification_options", []),
+            clarificationType=result.get("clarification_type"),
+            originalQuery=result.get("original_query"),
+            sessionId=sessionCtx.session_id,
         )
     except Exception as e:
         print(f"[에러] {e}")

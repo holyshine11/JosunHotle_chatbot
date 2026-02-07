@@ -15,12 +15,13 @@ const REQUEST_TIMEOUT = 60000;
  * @param {string} hotelId - 호텔 ID
  * @param {string} message - 사용자 메시지
  * @param {Array} history - 대화 히스토리
- * @returns {Promise<{answer: string, score?: number, sources?: string[]}>}
+ * @param {string|null} sessionId - 세션 ID (없으면 서버에서 자동 생성)
+ * @returns {Promise<{answer: string, score?: number, sources?: string[], sessionId?: string}>}
  */
-export async function sendMessage(hotelId, message, history = []) {
+export async function sendMessage(hotelId, message, history = [], sessionId = null) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-  
+
   try {
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
@@ -30,17 +31,18 @@ export async function sendMessage(hotelId, message, history = []) {
       body: JSON.stringify({
         hotelId,
         message,
-        history
+        history,
+        sessionId
       }),
       signal: controller.signal
     });
-    
+
     clearTimeout(timeoutId);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return data;
   } catch (error) {

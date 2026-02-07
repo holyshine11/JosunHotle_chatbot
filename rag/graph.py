@@ -43,6 +43,7 @@ class RAGState(TypedDict):
     needs_clarification: bool  # 명확화 필요 여부
     clarification_question: str  # 사용자에게 되물을 질문
     clarification_options: list[str]  # 선택지 목록
+    clarification_type: Optional[str]  # 명확화 타입 (시간/가격/예약/위치/반려동물/어린이)
 
     # 검색 결과
     retrieved_chunks: list[dict]
@@ -69,6 +70,9 @@ class RAGState(TypedDict):
     conversation_topic: Optional[str]  # 히스토리에서 추출한 현재 주제
     effective_category: Optional[str]  # 검색에 사용된 카테고리
 
+    # 세션 컨텍스트 (서버 세션 참조)
+    session_context: Optional[object]  # ConversationContext 객체 참조
+
     # 정책 필터
     policy_passed: bool
     policy_reason: str
@@ -83,6 +87,9 @@ class RAGGraph:
 
     # 근거 검증 임계값 (높을수록 엄격)
     EVIDENCE_THRESHOLD = 0.65  # 최소 유사도 점수 (질문 유효성 검사로 보완)
+
+    # 리랭커 설정
+    RERANKER_ENABLED = True  # Cross-Encoder 리랭커 사용 여부
 
     # 질문 유효성 검사용 키워드 (호텔 관련 질문인지 판단)
     VALID_QUERY_KEYWORDS = [
@@ -451,9 +458,31 @@ class RAGGraph:
         },
         "위치": {
             "keywords": ["위치", "어디", "어딨"],
-            "excludes": ["호텔 위치", "호텔 어디", "찾아가", "오시는"],  # 호텔 위치 질문은 명확
+            "excludes": [
+                "호텔 위치", "호텔 어디", "찾아가", "오시는",  # 호텔 위치 질문은 명확
+                "강아지", "반려", "펫", "pet", "애견", "고양이", "동반", "데려", "대려",  # 반려동물 맥락 제외
+                "개",  # Phase 13: 단독 "개" 추가
+            ],
             "options": ["호텔 위치/찾아오는 길", "수영장", "피트니스", "레스토랑", "스파"],
             "question": "어떤 시설의 위치를 알고 싶으신가요?",
+        },
+    }
+
+    # Phase 13: 맥락 인식 명확화 패턴 (AMBIGUOUS_PATTERNS보다 우선 적용)
+    # 특정 맥락이 감지되면 해당 맥락에 맞는 후속 질문 제시
+    CONTEXT_CLARIFICATION = {
+        "반려동물": {
+            "keywords": ["강아지", "반려견", "펫", "pet", "고양이", "동반", "데려", "대려", "반려동물", "애견"],
+            # 아래 트리거가 있으면 직접 답변 (명확화 불필요)
+            "direct_triggers": ["가능", "돼", "되", "허용", "입장", "출입", "?", "할수", "할 수", "있어", "없어", "시간", "가격", "요금", "위치", "어디"],
+            "question": "반려동물을 데리고 어디를 이용하실 예정인가요?",
+            "options": ["객실 투숙", "레스토랑/다이닝", "로비/공용시설", "전체 반려동물 정책"],
+        },
+        "어린이": {
+            "keywords": ["아이", "아기", "어린이", "유아", "키즈", "애기", "아들", "딸"],
+            "direct_triggers": ["가능", "돼", "되", "허용", "입장", "?", "있어", "없어", "몇살", "몇 살", "시간", "가격", "요금", "위치", "어디"],
+            "question": "어린이와 함께 어떤 시설을 이용하실 예정인가요?",
+            "options": ["객실 투숙", "수영장", "키즈클럽", "레스토랑"],
         },
     }
 
@@ -566,7 +595,7 @@ class RAGGraph:
                 "rewritten_query": query,
             }
 
-        # 맥락 참조 패턴 감지 (대명사, 지시어 등)
+        # 맥락 참조 패턴 감지 (대명사, 지시어, 암시적 후속 질문)
         contextPatterns = [
             r'^그럼\s*',      # "그럼 ..."
             r'^그러면\s*',    # "그러면 ..."
@@ -584,12 +613,19 @@ class RAGGraph:
             r'^더\s*',        # "더 ..."
             r'^다른\s*',      # "다른 ..."
             r'대략|대충|약|정도',  # 추가 정보 요청
+            r'할\s*수\s*있',  # "~할 수 있어?"
+            r'되나요|돼나요',  # "~되나요?"
+            r'가능한가|가능해',  # "~가능한가요?"
+            r'안\s*되나|안\s*돼나',  # "~안 되나요?"
+            r'얼마|비용|가격',  # 비용 질문
+            r'어디|위치|장소',  # 위치 질문
+            r'몇\s*시|언제',  # 시간 질문
         ]
 
         needsRewrite = any(re.search(p, query, re.IGNORECASE) for p in contextPatterns)
 
-        # 질문이 너무 짧으면 맥락 필요할 가능성 높음
-        if len(query.strip()) < 15:
+        # 질문이 짧으면 맥락 필요할 가능성 높음
+        if len(query.strip()) < 20:
             needsRewrite = True
 
         if not needsRewrite:
@@ -650,7 +686,13 @@ class RAGGraph:
         }
 
     def clarificationCheckNode(self, state: RAGState) -> RAGState:
-        """명확화 체크 노드: 모호한 질문 감지 및 명확화 질문 생성"""
+        """명확화 체크 노드: 모호한 질문 감지 및 명확화 질문 생성
+
+        Phase 13: 맥락 인식 명확화 시스템
+        - 반려동물, 어린이 등 특정 맥락 감지 시 맥락 맞춤 후속 질문
+        - direct_triggers가 있으면 바로 검색 (질문형인 경우)
+        - 없으면 맥락 맞춤 옵션 제시
+        """
         query = state.get("normalized_query") or state.get("rewritten_query") or state["query"]
         queryLower = query.lower()
         hotel = state.get("detected_hotel")
@@ -659,11 +701,46 @@ class RAGGraph:
         hotelInfo = self.HOTEL_INFO.get(hotel, {})
         hotelName = hotelInfo.get("name", "")
 
-        # 기본값 설정
-        needsClarification = False
-        clarificationQuestion = ""
-        clarificationOptions = []
+        # ========================================
+        # Phase 13: 맥락 인식 명확화 (최우선)
+        # ========================================
+        for contextKey, contextInfo in self.CONTEXT_CLARIFICATION.items():
+            keywords = contextInfo["keywords"]
+            directTriggers = contextInfo.get("direct_triggers", [])
 
+            # 맥락 키워드 매칭
+            if any(kw in queryLower for kw in keywords):
+                # 직접 답변 트리거 확인 (질문형이면 바로 검색)
+                if any(trigger in queryLower for trigger in directTriggers):
+                    print(f"[맥락 감지] '{query}' → {contextKey} 맥락, 직접 검색")
+                    return {
+                        **state,
+                        "needs_clarification": False,
+                        "clarification_question": "",
+                        "clarification_options": [],
+                        "detected_context": contextKey,
+                    }
+
+                # 맥락 맞춤 명확화 질문 (트리거 없는 경우)
+                question = contextInfo["question"]
+                if hotelName:
+                    question = f"[{hotelName}] {question}"
+
+                print(f"[맥락 명확화] '{query}' → {contextKey} 맥락, 추가 질문 필요")
+                return {
+                    **state,
+                    "needs_clarification": True,
+                    "clarification_question": question,
+                    "clarification_options": contextInfo["options"],
+                    "clarification_context": contextKey,
+                    "clarification_type": contextKey,  # "반려동물", "어린이" 등
+                    "evidence_passed": True,
+                    "final_answer": question,
+                }
+
+        # ========================================
+        # 기존 로직: 구체적 대상 체크
+        # ========================================
         # 이미 구체적인 대상이 있는지 확인하는 키워드들
         specificTargets = [
             # 체크인/아웃
@@ -695,7 +772,13 @@ class RAGGraph:
                 "clarification_options": [],
             }
 
-        # 모호한 패턴 검사
+        # ========================================
+        # 기존 로직: 모호한 패턴 검사
+        # ========================================
+        needsClarification = False
+        clarificationQuestion = ""
+        clarificationOptions = []
+
         for patternKey, patternInfo in self.AMBIGUOUS_PATTERNS.items():
             keywords = patternInfo["keywords"]
             excludes = patternInfo.get("excludes", [])
@@ -724,6 +807,7 @@ class RAGGraph:
                 "needs_clarification": True,
                 "clarification_question": clarificationQuestion,
                 "clarification_options": clarificationOptions,
+                "clarification_type": patternKey,  # "시간", "가격", "예약", "위치"
                 # 명확화 시 바로 응답하기 위한 필드 설정
                 "evidence_passed": True,
                 "final_answer": clarificationQuestion,
@@ -781,7 +865,12 @@ class RAGGraph:
             isValidQuery = False
 
         # 호텔 관련 키워드 검사 (블랙리스트 통과 시에만)
-        if isValidQuery:
+        # 후속 질문(히스토리 존재)은 키워드 검사 우회 - 이전 질문이 이미 통과함
+        history = state.get("history") or []
+        if isValidQuery and history:
+            # 대화 히스토리가 있으면 후속 질문으로 간주, 키워드 검사 생략
+            pass
+        elif isValidQuery:
             hasValidKeyword = False
             # 단어 경계 기반 매칭으로 개선 (ex: "방구"가 "방" 키워드에 매칭되지 않도록)
             for keyword in self.VALID_QUERY_KEYWORDS:
@@ -813,35 +902,80 @@ class RAGGraph:
     def retrieveNode(self, state: RAGState) -> RAGState:
         """검색 노드: Vector DB에서 관련 청크 검색 (쿼리 확장 + 카테고리 필터)
 
-        카테고리 필터는 후속 질문(히스토리 있음)에서만 적용하여
-        컨텍스트 오염을 방지.
+        - 세션 컨텍스트 기반 주제 폴백
+        - 같은 주제 후속 질문 시 캐시 우선 검색
+        - 카테고리 필터는 후속 질문에서만 적용 (컨텍스트 오염 방지)
         """
         query = state["normalized_query"]
         hotel = state["detected_hotel"]
         detectedCategory = state.get("category")
         history = state.get("history", [])
+        sessionCtx = state.get("session_context")
 
-        # 대화 주제 추출 (히스토리 기반)
+        # === 호텔명 제거: 벡터 임베딩 왜곡 방지 ===
+        # 호텔 필터는 Chroma 메타데이터로 적용되므로 쿼리 텍스트에서 제거
+        searchQuery = self._stripHotelName(query, hotel)
+
+        # === 주제 추출: 키워드 기반 + 세션 폴백 ===
         conversationTopic = self._extractConversationTopic(history)
 
-        # 효과적 카테고리 결정:
-        # - 히스토리가 있는 경우(후속 질문): 대화 주제로 필터링
-        # - 히스토리가 없는 경우(첫 질문): 필터 없이 검색
+        # 키워드 추출 실패 시 세션의 현재 주제 사용
+        if not conversationTopic and sessionCtx and sessionCtx.current_topic and history:
+            conversationTopic = sessionCtx.current_topic
+            print(f"[세션 주제] 키워드 추출 실패 → 세션 주제 사용: {conversationTopic}")
+
+        # 효과적 카테고리 결정 (리랭커가 있으므로 후속 질문에서는 필터 제거)
+        # 카테고리 필터는 인덱스 카테고리명과 불일치 위험이 높아 리랭커에 의존
         effectiveCategory = None
         if history and conversationTopic:
-            # 후속 질문: 대화 주제로 필터링 (컨텍스트 오염 방지)
-            effectiveCategory = conversationTopic
+            if detectedCategory and detectedCategory != conversationTopic:
+                print(f"[주제 전환] 히스토리 '{conversationTopic}' → 현재 쿼리 '{detectedCategory}'")
+            # 후속 질문에서는 카테고리 필터 없이 검색 (리랭커가 정확도 보장)
+
+        # === 세션 주제 기반 쿼리 보강 ===
+        # 현재 쿼리에 명확한 카테고리가 없고, 히스토리 주제와 세션 주제가 일치할 때만 보강
+        if (conversationTopic and history and sessionCtx
+                and not detectedCategory
+                and conversationTopic == sessionCtx.current_topic):
+            topicKeywords = {
+                "조식": "조식", "다이닝": "레스토랑 다이닝", "수영장": "수영장",
+                "피트니스": "피트니스", "스파": "스파", "주차": "주차",
+                "체크인/아웃": "체크인 체크아웃", "객실": "객실",
+                "요금/결제": "요금 결제", "반려동물": "반려동물"
+            }
+            topicKw = topicKeywords.get(conversationTopic, conversationTopic)
+            # 쿼리에 주제 키워드가 없으면 추가
+            if not any(kw in searchQuery for kw in topicKw.split()):
+                searchQuery = f"{searchQuery} {topicKw}"
+                print(f"[세션 보강] 쿼리에 주제 키워드 추가: '{topicKw}' → '{searchQuery}'")
+
+        # === 캐시 우선 검색 (같은 주제 후속 질문) ===
+        cachedResults = None
+        if (sessionCtx and sessionCtx.last_chunks and
+                history and conversationTopic and
+                conversationTopic == sessionCtx.current_topic):
+            cachedResults = self._searchCachedChunks(searchQuery, sessionCtx.last_chunks,
+                                                     conversationTopic)
 
         # 쿼리 확장 (동의어 추가)
-        expandedQuery = self._expandQuery(query)
+        expandedQuery = self._expandQuery(searchQuery)
 
-        # 1차 검색
-        results = self.indexer.search(
-            query=expandedQuery,
-            hotel=hotel,
-            category=effectiveCategory,  # 후속 질문시에만 필터 적용
-            topK=5
-        )
+        # 캐시 결과가 충분하면 DB 검색 생략
+        if cachedResults and len(cachedResults) >= 2 and cachedResults[0].get("score", 0) >= 0.7:
+            print(f"[캐시 히트] 이전 청크에서 {len(cachedResults)}개 관련 결과 발견")
+            results = cachedResults
+        else:
+            # 1차 검색
+            results = self.indexer.search(
+                query=expandedQuery,
+                hotel=hotel,
+                category=effectiveCategory,
+                topK=5
+            )
+
+            # 캐시 결과와 병합 (캐시에만 있는 관련 청크 추가)
+            if cachedResults:
+                results = self._mergeResults(results, cachedResults, topK=5)
 
         # 폴백: 결과가 2개 미만이면 필터 완화하여 재검색
         if len(results) < 2 and effectiveCategory:
@@ -855,6 +989,25 @@ class RAGGraph:
             if len(fallbackResults) > len(results):
                 results = fallbackResults
                 effectiveCategory = None  # 폴백으로 변경됨
+
+        # === 리랭킹 (Cross-Encoder) ===
+        if self.RERANKER_ENABLED and results and len(results) >= 2:
+            try:
+                from rag.reranker import getReranker
+                reranker = getReranker()
+                if reranker.isAvailable:
+                    results = reranker.rerank(
+                        query=searchQuery,
+                        chunks=results,
+                        topK=5
+                    )
+                    # evidence_gate는 원본 하이브리드 점수 기준으로 동작
+                    # 리랭킹은 순서/필터만 변경, 점수 기준은 original_score 유지
+                    for chunk in results:
+                        if "original_score" in chunk:
+                            chunk["score"] = chunk["original_score"]
+            except Exception as e:
+                print(f"[리랭커 오류] {e}")
 
         # 최고 점수 계산
         topScore = results[0]["score"] if results else 0.0
@@ -914,27 +1067,38 @@ class RAGGraph:
                 "sources": [],
             }
 
-        # 출처 수집 (중복 제거)
+        # 컨텍스트 구성 + 출처 수집 (상위 5개 청크, 번호/URL 포함)
+        contextParts = []
         sources = []
         seenUrls = set()
-        for chunk in chunks[:3]:
-            url = chunk["metadata"].get("url", "")
-            if url and url not in seenUrls:
-                sources.append(url)
-                seenUrls.add(url)
 
-        # 컨텍스트 구성 (상위 5개 청크 포함)
-        contextParts = []
         for i, chunk in enumerate(chunks[:5], 1):
             hotelName = chunk["metadata"].get("hotel_name", "")
+            url = chunk["metadata"].get("url", "")
             text = chunk["text"]
-            contextParts.append(f"[{hotelName}]\n{text}")
+
+            # 컨텍스트에 청크 번호와 URL 포함 (LLM이 출처 추적 가능)
+            contextParts.append(f"[참조{i}] [{hotelName}] (출처: {url})\n{text}")
+
+            # 출처 수집 (중복 제거)
+            if url and url not in seenUrls:
+                sources.append({"index": i, "url": url, "hotel": hotelName})
+                seenUrls.add(url)
 
         context = "\n\n".join(contextParts)
 
         # LLM 사용 여부에 따라 분기
+        usedRefs = []
         if self.LLM_ENABLED:
             answer = self._generateWithLLM(query, context, hotel)
+
+            # [REF:1,3] 형태의 참조 번호 파싱
+            refMatch = re.search(r'\[REF:([0-9,\s]+)\]', answer)
+            if refMatch:
+                refStr = refMatch.group(1)
+                usedRefs = [int(r.strip()) for r in refStr.split(',') if r.strip().isdigit()]
+                # 답변에서 [REF:...] 제거 (사용자에게는 보이지 않도록)
+                answer = re.sub(r'\s*\[REF:[0-9,\s]+\]', '', answer).strip()
         else:
             # LLM 미사용 시 검색 결과 직접 반환
             topChunk = chunks[0]
@@ -944,11 +1108,22 @@ class RAGGraph:
             hotelName = topChunk["metadata"].get("hotel_name", "")
             if hotelName:
                 answer = f"[{hotelName}] {answer}"
+            usedRefs = [1]  # LLM 미사용시 첫번째 청크만 사용
+
+        # 사용된 참조의 URL만 필터링
+        usedSources = []
+        if usedRefs:
+            for src in sources:
+                if src["index"] in usedRefs:
+                    usedSources.append(src["url"])
+        else:
+            # 참조 번호가 없으면 모든 소스 사용 (fallback)
+            usedSources = [src["url"] for src in sources]
 
         return {
             **state,
             "answer": answer,
-            "sources": sources,
+            "sources": usedSources,  # 사용된 URL만 전달
         }
 
     def _generateWithLLM(self, query: str, context: str, hotel: str = None) -> str:
@@ -1015,8 +1190,13 @@ class RAGGraph:
 [지시사항]
 1. 반드시 완성된 문장으로 정중하게 답변하세요
 2. 단어나 숫자만 던지지 마세요 (예: "역삼역" X → "가장 가까운 역은 역삼역입니다" O)
-3. 참고 정보만 사용하세요
-4. "궁금하신가요?" 같은 추가 질문은 절대 하지 마세요"""
+3. 참고 정보만 사용하세요. 참고 정보에 없는 내용은 절대 추가하지 마세요
+4. "궁금하신가요?" 같은 추가 질문은 절대 하지 마세요
+5. 답변 마지막에 반드시 사용한 참조 번호를 표시하세요. 형식: [REF:1,3] (쉼표로 구분)
+
+[답변 형식 예시]
+조식은 오전 7시부터 10시까지 운영됩니다. [REF:2]
+체크인은 15시, 체크아웃은 11시입니다. [REF:1,3]"""
 
         try:
             # LLM Provider를 통한 답변 생성
@@ -1051,28 +1231,17 @@ class RAGGraph:
     def _extractConversationTopic(self, history: list[dict]) -> Optional[str]:
         """대화 히스토리에서 현재 주제 추출 (컨텍스트 오염 방지)
 
-        최근 4개 메시지를 분석하여 대화 주제(카테고리)를 반환.
-        예: 조식 → "조식", 수영장 → "부대시설"
+        user 메시지만 분석 (봇 답변 노이즈 제거).
+        최근 user 메시지부터 역순으로 검사하여 현재 대화 주제 우선.
         """
         if not history:
             return None
 
-        # 최근 4개 메시지만 분석
-        recentMessages = history[-4:] if len(history) > 4 else history
-
-        # 메시지 텍스트 결합
-        combinedText = ""
-        for msg in recentMessages:
-            content = msg.get("content", "")
-            combinedText += f" {content}"
-
-        combinedTextLower = combinedText.lower()
-
         # 카테고리별 키워드 매칭 (우선순위 순서)
-        # 더 구체적인 카테고리를 먼저 검사
         topicPriority = [
             ("조식", ["조식", "breakfast", "아침식사", "뷔페", "아침밥", "모닝"]),
-            ("다이닝", ["레스토랑", "식당", "다이닝", "저녁", "점심", "런치", "디너"]),
+            ("다이닝", ["레스토랑", "식당", "다이닝", "저녁", "점심", "런치", "디너",
+                      "아리아", "홍연", "콘스탄스", "팔레"]),
             ("수영장", ["수영", "pool", "풀", "swimming", "수영장"]),
             ("피트니스", ["피트니스", "헬스", "gym", "fitness", "운동"]),
             ("스파", ["스파", "spa", "마사지", "massage", "사우나"]),
@@ -1083,12 +1252,62 @@ class RAGGraph:
             ("반려동물", ["강아지", "반려견", "pet", "펫", "반려동물", "애견"]),
         ]
 
-        for topic, keywords in topicPriority:
-            for keyword in keywords:
-                if keyword.lower() in combinedTextLower:
+        # user 메시지만 추출 (봇 답변 노이즈 제거)
+        userMessages = [
+            msg.get("content", "") for msg in history
+            if msg.get("role") == "user"
+        ]
+
+        if not userMessages:
+            return None
+
+        # 최근 user 메시지부터 역순 검사 (현재 대화 주제 우선)
+        for msg in reversed(userMessages[-3:]):
+            msgLower = msg.lower()
+            for topic, keywords in topicPriority:
+                if any(kw.lower() in msgLower for kw in keywords):
                     return topic
 
         return None
+
+    def _stripHotelName(self, query: str, hotel: str) -> str:
+        """검색 쿼리에서 호텔명/지역명을 제거하여 벡터 임베딩 왜곡 방지.
+        호텔 필터는 이미 Chroma 메타데이터로 적용되므로 쿼리 텍스트에 불필요.
+        """
+        if not hotel or hotel not in self.HOTEL_KEYWORDS:
+            return query
+
+        # 해당 호텔의 모든 키워드 수집
+        hotelKws = self.HOTEL_KEYWORDS[hotel]
+        # HOTEL_INFO의 정식 이름도 추가
+        hotelInfo = self.HOTEL_INFO.get(hotel, {})
+        if hotelInfo.get("name"):
+            hotelKws = list(hotelKws) + [hotelInfo["name"]]
+
+        # 긴 키워드부터 제거 (부분 매칭 방지: "그랜드 조선 부산"을 "부산"보다 먼저)
+        sortedKws = sorted(hotelKws, key=len, reverse=True)
+
+        stripped = query
+        for kw in sortedKws:
+            # 호텔명 + 뒤따르는 조사까지 함께 제거
+            pattern = re.escape(kw) + r'(에서|에서의|에|의|은|는|이|가|을|를|으로|로|과|와|도)?'
+            stripped = re.sub(pattern, '', stripped)
+
+        # 문장 시작의 잔여 조사 정리
+        stripped = re.sub(r'^\s*(에서|에|의|은|는|이|가|을|를|으로|로|과|와|도)\s+', '', stripped)
+        # "인 의" 같은 잔여 패턴 정리
+        stripped = re.sub(r'\s+(에서|에|의|은|는|이|가|을|를|으로|로|과|와|도)\s+', ' ', stripped)
+        # 중복 공백 제거
+        stripped = re.sub(r'\s+', ' ', stripped).strip()
+
+        if stripped != query.strip():
+            print(f"[호텔명 제거] '{query}' → '{stripped}'")
+
+        # 제거 후 쿼리가 너무 짧으면 원본 반환
+        if len(stripped) < 3:
+            return query
+
+        return stripped
 
     def _expandQuery(self, query: str) -> str:
         """쿼리 확장 (동의어 추가)"""
@@ -1105,6 +1324,74 @@ class RAGGraph:
             return f"{query} {' '.join(uniqueTerms[:5])}"  # 최대 5개 동의어
 
         return query
+
+    def _searchCachedChunks(self, query: str, cachedChunks: list,
+                            sessionTopic: str = None) -> list:
+        """캐시된 청크에서 쿼리 관련성 검색 (키워드 오버랩 + 주제 부스팅)"""
+        queryLower = query.lower()
+        # 한글 2글자 이상 토큰 + 영문 토큰
+        queryTokens = set(re.findall(r'[가-힣]{2,}', queryLower))
+        queryTokens.update(re.findall(r'[a-z]{2,}', queryLower))
+
+        if not queryTokens:
+            return []
+
+        # 세션 주제 관련 키워드 (부스팅용)
+        topicBoostKeywords = set()
+        if sessionTopic:
+            topicMap = {
+                "조식": {"조식", "breakfast", "아침식사", "뷔페", "아침밥"},
+                "다이닝": {"레스토랑", "식당", "다이닝", "dinner", "lunch"},
+                "수영장": {"수영", "pool", "수영장"},
+                "피트니스": {"피트니스", "헬스", "gym", "fitness"},
+                "스파": {"스파", "spa", "마사지"},
+                "주차": {"주차", "parking", "발렛"},
+                "체크인/아웃": {"체크인", "체크아웃", "입실", "퇴실"},
+                "객실": {"객실", "room", "침대"},
+                "반려동물": {"반려동물", "반려견", "pet", "강아지"},
+            }
+            topicBoostKeywords = topicMap.get(sessionTopic, {sessionTopic})
+
+        scored = []
+        for chunk in cachedChunks:
+            text = chunk.get("text", "").lower()
+            chunkTokens = set(re.findall(r'[가-힣]{2,}', text))
+            chunkTokens.update(re.findall(r'[a-z]{2,}', text))
+
+            # 키워드 오버랩 점수
+            overlap = queryTokens & chunkTokens
+            overlapScore = len(overlap) / len(queryTokens) if queryTokens else 0
+
+            # 주제 부스팅: 청크가 세션 주제와 관련있으면 점수 부스팅
+            topicBoost = 0.0
+            if topicBoostKeywords:
+                topicOverlap = topicBoostKeywords & chunkTokens
+                if topicOverlap:
+                    topicBoost = 0.4  # 주제 일치 시 0.4 부스트
+
+            # 원본 하이브리드 점수를 가중치로 반영
+            originalScore = chunk.get("original_score", chunk.get("score", 0.5))
+            combinedScore = overlapScore * 0.3 + originalScore * 0.3 + topicBoost
+
+            scored.append({**chunk, "score": combinedScore, "source": "cache"})
+
+        # 점수순 정렬
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:5]
+
+    def _mergeResults(self, primary: list, secondary: list, topK: int = 5) -> list:
+        """두 검색 결과 병합 (중복 제거, 점수순 정렬)"""
+        seen = {r.get("chunk_id") for r in primary if r.get("chunk_id")}
+        merged = list(primary)
+
+        for r in secondary:
+            chunkId = r.get("chunk_id")
+            if chunkId and chunkId not in seen:
+                merged.append(r)
+                seen.add(chunkId)
+
+        merged.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return merged[:topK]
 
     def _extractQueryKeywords(self, query: str) -> list[str]:
         """질문에서 핵심 키워드 추출"""
@@ -1565,8 +1852,14 @@ class RAGGraph:
         # 출처 추가
         sources = state.get("sources", [])
         finalAnswer = answer
+        # 사용된 모든 출처 URL 표시 (중복 제거)
         if sources:
-            finalAnswer += f"\n\n참고 정보: {sources[0]}"
+            uniqueSources = list(dict.fromkeys(sources))  # 순서 유지하며 중복 제거
+            if len(uniqueSources) == 1:
+                finalAnswer += f"\n\n참고 정보: {uniqueSources[0]}"
+            else:
+                sourceList = "\n".join([f"- {url}" for url in uniqueSources])
+                finalAnswer += f"\n\n참고 정보:\n{sourceList}"
 
         return {
             **state,
@@ -1603,8 +1896,16 @@ class RAGGraph:
             "log": logEntry,
         }
 
-    def chat(self, query: str, hotel: str = None, history: list = None) -> dict:
-        """채팅 실행"""
+    def chat(self, query: str, hotel: str = None, history: list = None,
+             sessionCtx=None) -> dict:
+        """채팅 실행
+
+        Args:
+            query: 사용자 질문
+            hotel: 호텔 ID (선택)
+            history: 대화 히스토리 (선택)
+            sessionCtx: 세션 컨텍스트 객체 (선택, ConversationContext)
+        """
         initialState: RAGState = {
             "query": query,
             "hotel": hotel,
@@ -1619,6 +1920,7 @@ class RAGGraph:
             "needs_clarification": False,
             "clarification_question": "",
             "clarification_options": [],
+            "clarification_type": None,
             "retrieved_chunks": [],
             "top_score": 0.0,
             "evidence_passed": False,
@@ -1633,6 +1935,8 @@ class RAGGraph:
             # 대화 주제 추적 (컨텍스트 오염 방지)
             "conversation_topic": None,
             "effective_category": None,
+            # 세션 컨텍스트
+            "session_context": sessionCtx,
             "policy_passed": False,
             "policy_reason": "",
             "final_answer": "",
@@ -1641,6 +1945,16 @@ class RAGGraph:
 
         # 그래프 실행
         result = self.graph.invoke(initialState)
+
+        # 세션 업데이트 (그래프 실행 후)
+        if sessionCtx:
+            # 현재 쿼리 기반 카테고리를 히스토리 기반 주제보다 우선
+            detectedTopic = result.get("category") or result.get("conversation_topic")
+            sessionCtx.updateTopic(detectedTopic, result.get("detected_hotel"))
+            sessionCtx.cacheChunks(
+                result.get("retrieved_chunks", []),
+                query
+            )
 
         return {
             "answer": result["final_answer"],
@@ -1653,6 +1967,8 @@ class RAGGraph:
             # 명확화 관련 필드
             "needs_clarification": result.get("needs_clarification", False),
             "clarification_options": result.get("clarification_options", []),
+            "clarification_type": result.get("clarification_type"),
+            "original_query": query,  # 명확화 트리거된 원본 질문
         }
 
 

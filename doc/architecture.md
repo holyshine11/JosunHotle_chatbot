@@ -131,14 +131,19 @@ python tests/test_grounding.py  # Grounding 테스트
 
 ### `/ui` - 웹 UI
 
-정적 웹 채팅 인터페이스
+프리미엄 웹 채팅 인터페이스 (Tailwind CSS)
 
 | 폴더/파일 | 설명 |
 |-----------|------|
-| `index.html` | 메인 페이지 |
-| `css/` | 스타일시트 |
-| `js/` | 클라이언트 JavaScript |
-| `assets/` | 이미지/아이콘 |
+| `index.html` | 메인 페이지 (다크모드, 반응형) |
+| `css/style.css` | CSS 변수, 다크모드, 애니메이션 |
+| `screenshots/` | UI 스크린샷 (라이트/다크/모바일) |
+
+**UI 기능:**
+- 다크모드 지원 (토글 버튼, localStorage 저장)
+- 색상 시스템 (딥블루 #1a365d + 골드 #c9a961)
+- 메시지 애니메이션 (fadeIn + slideUp)
+- 모바일 반응형 (터치 타겟 44px)
 
 ---
 
@@ -155,7 +160,7 @@ python tests/test_grounding.py  # Grounding 테스트
 | `supplementary/` | 보충 데이터 |
 
 **데이터 현황:**
-- 총 청크: 361개
+- 총 청크: 373개 (기본 359 + 보충 14)
 - 호텔: 5개 (조선 팰리스, 부산, 제주, 레스케이프, 그래비티)
 
 ---

@@ -124,7 +124,8 @@
       messages: [],
       isSending: false,
       showHotelDropdown: false,
-      theme: localStorage.getItem('theme') || 'light'
+      theme: localStorage.getItem('theme') || 'light',
+      sessionId: null  // 세션 ID (서버에서 발급)
     };
 
     // 타이머 관련
@@ -154,16 +155,26 @@
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hotelId, message, history })
+        body: JSON.stringify({ hotelId, message, history, sessionId: state.sessionId })
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
+      const data = await response.json();
+      // 세션 ID 저장
+      if (data.sessionId) {
+        state.sessionId = data.sessionId;
+      }
+      return data;
     }
 
     // 대화 히스토리 추출 (최근 6개 메시지 = 3턴)
     function getConversationHistory() {
       const relevantMessages = state.messages
-        .filter(m => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
+        .filter(m => {
+          if (m.role === 'user') return true;
+          // 명확화 질문은 히스토리에서 제외 (메타 정보이므로 LLM 컨텍스트 오염 방지)
+          if (m.role === 'assistant' && m.status === 'done' && !m.needsClarification) return true;
+          return false;
+        })
         .slice(-6)
         .map(m => ({
           role: m.role,
@@ -502,7 +513,9 @@
             timestamp: timestamp,
             elapsedTime: elapsedTime,
             needsClarification: response.needsClarification || false,
-            clarificationOptions: response.clarificationOptions || []
+            clarificationOptions: response.clarificationOptions || [],
+            clarificationType: response.clarificationType || null,
+            originalQuery: response.originalQuery || null
           };
         }
       } catch (error) {
@@ -561,6 +574,7 @@
 
         case 'new-chat':
           state.messages = [];
+          state.sessionId = null;  // 세션 초기화
           render();
           break;
 
@@ -589,9 +603,34 @@
         case 'clarification-option':
           const selectedOption = target.dataset.option;
           if (selectedOption && state.currentHotel && !state.isSending) {
+            // 이전 봇 메시지에서 명확화 메타데이터 추출
+            const botMessages = state.messages.filter(m => m.role === 'assistant' && m.needsClarification);
+            const lastBotMsg = botMessages[botMessages.length - 1];
+            const cType = lastBotMsg?.clarificationType || null;
+            const origQuery = lastBotMsg?.originalQuery || null;
+
+            // 타입별 완전한 질문 생성
+            const clarificationTemplates = {
+              '시간': `${selectedOption} 운영시간 알려줘`,
+              '가격': `${selectedOption} 가격 알려줘`,
+              '예약': `${selectedOption} 예약 방법 알려줘`,
+              '위치': `${selectedOption} 위치 알려줘`,
+              '반려동물': `반려동물 ${selectedOption} 정책 알려줘`,
+              '어린이': `어린이 ${selectedOption} 이용 알려줘`,
+            };
+
+            let fullQuery;
+            if (cType && clarificationTemplates[cType]) {
+              fullQuery = clarificationTemplates[cType];
+            } else if (origQuery) {
+              fullQuery = `${origQuery} ${selectedOption}`;
+            } else {
+              fullQuery = selectedOption;
+            }
+
             const input = document.getElementById('message-input');
             if (input) {
-              input.value = selectedOption;
+              input.value = fullQuery;
               handleSend();
             }
           }

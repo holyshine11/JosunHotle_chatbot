@@ -58,7 +58,8 @@ const initialState = {
   messages: [],              // 대화 메시지 [{id, role, content, createdAt, status}]
   isSending: false,          // 전송 중 여부
   errorState: null,          // 에러 상태
-  showHotelModal: true       // 호텔 선택 모달 표시 여부
+  showHotelModal: true,      // 호텔 선택 모달 표시 여부
+  sessionId: null            // 세션 ID (서버에서 발급)
 };
 
 // 상태 저장소
@@ -213,7 +214,8 @@ export function startNewChat() {
     ...state,
     messages: [],
     errorState: null,
-    isSending: false
+    isSending: false,
+    sessionId: null  // 세션 초기화
   };
   notifySubscribers();
 }

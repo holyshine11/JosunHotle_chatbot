@@ -283,6 +283,26 @@
       "min_score": 0.7
     },
     {
+      "id": "pet_busan_question_001",
+      "query": "강아지 데려가도 돼?",
+      "hotel": "grand_josun_busan",
+      "category": "반려동물",
+      "expected_keywords": ["반려", "동반", "불가"],
+      "forbidden_keywords": ["어떤 시설의 위치"],
+      "min_score": 0.5,
+      "description": "질문형 반려동물 - 직접 정책 안내"
+    },
+    {
+      "id": "pet_palace_context_001",
+      "query": "개 대려갈게",
+      "hotel": "josun_palace",
+      "category": "반려동물",
+      "expected_keywords": ["반려동물", "어디를", "이용"],
+      "forbidden_keywords": ["어떤 시설의 위치"],
+      "min_score": 0.0,
+      "description": "모호한 반려동물 - 맥락 맞춤 명확화 질문 (score=0 허용)"
+    },
+    {
       "id": "parking_palace_001",
       "query": "조선 팰리스 주차 요금",
       "hotel": "josun_palace",
