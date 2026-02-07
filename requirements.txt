@@ -20,6 +20,9 @@ lxml>=5.0.0
 # Data Processing
 pyyaml>=6.0.0
 
+# BM25 Search
+rank_bm25>=0.2.2
+
 # API Server
 fastapi>=0.115.0
 uvicorn>=0.32.0
