@@ -48,6 +48,14 @@ class GroundingGate:
         (r'할인', "할인"),
     ]
 
+    # 고유명사 패턴 (한글+영문 병기: 할루시네이션 위험 높음)
+    PROPER_NOUN_PATTERNS = [
+        # "그랜드 셰프 (Grand Chef)" 같은 한영 병기 패턴
+        (r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)', "한영병기 시설명"),
+        # "~ 레스토랑", "~ 카페" 등 시설 명칭
+        (r'([가-힣A-Za-z]{2,}(?:\s+[가-힣A-Za-z]+)*)\s+(레스토랑|카페|바(?![가-힣])|라운지|센터|클럽)', "시설명"),
+    ]
+
     # 질문 의도 분류 키워드
     INTENT_KEYWORDS = {
         "fee_entry": ["입장료", "이용료", "이용 요금", "얼마", "가격", "비용", "요금"],
@@ -300,6 +308,29 @@ class GroundingGate:
                 return True
         return False
 
+    def verifyProperNouns(self, text: str, context: str) -> tuple[bool, list[str]]:
+        """고유명사가 컨텍스트에 존재하는지 검증"""
+        unverified = []
+        contextLower = context.lower()
+
+        for pattern, nounType in self.PROPER_NOUN_PATTERNS:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                fullMatch = match.group(0)
+                # 한영 병기인 경우 두 이름 모두 확인
+                if nounType == "한영병기 시설명":
+                    koName = match.group(1).strip()
+                    enName = match.group(2).strip()
+                    # 한글명과 영문명 중 하나라도 컨텍스트에 있으면 통과
+                    if koName.lower() not in contextLower and enName.lower() not in contextLower:
+                        unverified.append(f"{fullMatch} ({nounType})")
+                elif nounType == "시설명":
+                    facilityName = match.group(1).strip()
+                    if len(facilityName) >= 2 and facilityName.lower() not in contextLower:
+                        unverified.append(f"{fullMatch} ({nounType})")
+
+        return len(unverified) == 0, unverified
+
     def verifyClaim(self, claim: str, context: str) -> Claim:
         """개별 주장 검증"""
         # 일반적인 설명 문구는 검증 건너뛰기 (통과 처리)
@@ -322,6 +353,19 @@ class GroundingGate:
 
         if hasNumeric:
             numericVerified, unverified = self.verifyNumericTokens(claim, context)
+
+        # 고유명사 검증 (컨텍스트에 없는 시설명 차단)
+        properNounVerified, properNounUnverified = self.verifyProperNouns(claim, context)
+        if not properNounVerified:
+            # 고유명사 검증 실패 → 무조건 reject
+            return Claim(
+                text=claim,
+                evidence_span=evidenceSpan,
+                evidence_score=evidenceScore,
+                is_grounded=False,
+                has_numeric=hasNumeric,
+                numeric_verified=False  # 고유명사 미검증 = 수치 미검증과 동급
+            )
 
         # 최종 grounded 판정
         isGrounded = (

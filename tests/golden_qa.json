@@ -152,7 +152,7 @@
       "query": "그랜드 조선 부산 수영장 운영시간",
       "hotel": "grand_josun_busan",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "08:00", "21:00", "수영"],
+      "expected_keywords": ["06:00", "22:00", "08:00", "21:00", "수영", "6시", "10시", "Pool"],
       "forbidden_keywords": ["제주"],
       "min_score": 0.7
     },
