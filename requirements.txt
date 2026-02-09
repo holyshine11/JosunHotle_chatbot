@@ -27,6 +27,9 @@ rank_bm25>=0.2.2
 fastapi>=0.115.0
 uvicorn>=0.32.0
 
+# TTS (Text-to-Speech)
+edge-tts>=7.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.66.0

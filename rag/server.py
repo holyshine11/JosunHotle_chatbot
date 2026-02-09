@@ -8,6 +8,8 @@ FastAPI 기반 RAG 챗봇 서버
 
 import os
 import sys
+import io
+import asyncio
 import traceback
 from pathlib import Path
 
@@ -18,7 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
@@ -146,6 +148,47 @@ async def chat(request: ChatRequest):
         )
 
 
+# ========== TTS 엔드포인트 (Edge TTS) ==========
+TTS_VOICE = "ko-KR-HyunsuMultilingualNeural"  # 젊고 부드러운 남성 음성
+
+class TTSRequest(BaseModel):
+    text: str
+    rate: Optional[str] = "+0%"  # 속도 조절 (-50%~+100%)
+
+
+@app.post("/tts")
+async def tts(request: TTSRequest):
+    """텍스트를 음성(MP3)으로 변환"""
+    try:
+        import edge_tts
+
+        text = request.text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="텍스트가 비어 있습니다.")
+        if len(text) > 2000:
+            text = text[:2000]  # 너무 긴 텍스트 제한
+
+        communicate = edge_tts.Communicate(text, TTS_VOICE, rate=request.rate)
+
+        # 메모리에 MP3 생성
+        buffer = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buffer.write(chunk["data"])
+
+        buffer.seek(0)
+        return StreamingResponse(
+            buffer,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline"}
+        )
+    except ImportError:
+        raise HTTPException(status_code=501, detail="edge-tts 패키지가 설치되지 않았습니다.")
+    except Exception as e:
+        print(f"[TTS 에러] {e}")
+        raise HTTPException(status_code=500, detail="음성 생성에 실패했습니다.")
+
+
 # 정적 파일 제공 (UI)
 UI_DIR = PROJECT_ROOT / "ui"
 if UI_DIR.exists():
@@ -156,6 +199,8 @@ if UI_DIR.exists():
         app.mount("/js", StaticFiles(directory=UI_DIR / "js"), name="js")
     if (UI_DIR / "assets").exists():
         app.mount("/assets", StaticFiles(directory=UI_DIR / "assets"), name="assets")
+    if (UI_DIR / "static").exists():
+        app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
 
     @app.get("/")
     async def serveIndex():

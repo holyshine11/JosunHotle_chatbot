@@ -27,7 +27,8 @@ python tests/evaluate.py --quick        # 10개 샘플만
 python tests/test_multiturn.py --save   # 멀티턴 테스트 (6시나리오, 22턴)
 
 # 데이터 파이프라인
-python pipeline/index_supplementary.py  # 보충 데이터 인덱싱
+python pipeline/index_all.py            # 전체 인덱스 재구축 (clean + deep_processed + supplementary)
+python pipeline/index_supplementary.py  # 보충 데이터만 인덱싱
 python crawler/crawl_api.py             # JSON API 크롤링 (패키지/이벤트/액티비티)
 
 # 모니터링
@@ -49,26 +50,28 @@ queryRewriteNode → preprocessNode → clarificationCheckNode → retrieveNode
 
 | 노드 | 역할 |
 |------|------|
-| `queryRewriteNode` | 대화 맥락 반영 쿼리 재작성 |
+| `queryRewriteNode` | 대화 맥락 반영 쿼리 재작성, 주제 전환 감지 (11개 토픽 그룹) |
 | `preprocessNode` | 입력 정규화, 언어/호텔/카테고리 감지, `VALID_QUERY_KEYWORDS` 검증 |
 | `clarificationCheckNode` | 모호한 질문 명확화 (맥락 인식, 주체 감지) |
 | `retrieveNode` | Vector(70%) + BM25(30%) 하이브리드 검색 + Cross-Encoder 리랭킹 |
 | `evidenceGateNode` | 근거 검증 (`EVIDENCE_THRESHOLD: 0.65`), topScore = max(scores) |
 | `answerComposeNode` | LLM 답변 생성 (Temperature 0.1), `[REF:N]` 참조 추적 |
-| `answerVerifyNode` | 할루시네이션 검증 + `CategoryConsistencyChecker` 오염 검사 |
+| `answerVerifyNode` | 다층 검증: Grounding Gate + 할루시네이션 + 교통편 날조 + 고유명사 + 카테고리 오염 + Fallback 직접 추출 |
 | `policyFilterNode` | 금지 주제/개인정보 필터링 |
 | `logNode` | JSONL 로깅 → `data/logs/` |
 
-### 핵심 클래스/상수
+### 핵심 모듈
 
-- `RAGState` (TypedDict): 그래프 상태 - query, hotel, history, retrieved_chunks, answer 등
-- `RAGGraph`: 메인 그래프 클래스. `chat(query, hotel, history, sessionId)` 메서드
-- `VALID_QUERY_KEYWORDS`: 586개 호텔 관련 키워드 (무관한 질문 차단)
-- `CATEGORY_KEYWORDS`: 15개 카테고리 분류 키워드
-- `EVIDENCE_THRESHOLD = 0.65`: 근거 점수 임계값
-- `Reranker` (`rag/reranker.py`): BAAI/bge-reranker-v2-m3, `RELATIVE_THRESHOLD = 0.35`, 키워드 보호 로직
-- `GroundingGate` (`rag/grounding.py`): 문장 단위 근거 검증
-- `CategoryConsistencyChecker`: 카테고리 교차 오염 감지/정제
+| 파일 | 역할 |
+|------|------|
+| `rag/graph.py` | LangGraph 9노드 파이프라인, RAGGraph 클래스, chat() 진입점 |
+| `rag/constants.py` | 모든 상수/설정 (키워드 586개, 호텔 매핑, 카테고리, 동의어 등) |
+| `rag/grounding.py` | GroundingGate (문장 단위 근거 검증), CategoryConsistencyChecker |
+| `rag/reranker.py` | BAAI/bge-reranker-v2-m3, RELATIVE_THRESHOLD=0.35, 키워드 보호 |
+| `rag/server.py` | FastAPI 서버, POST /chat, GET /health |
+| `rag/llm_provider.py` | Ollama LLM 호출 래퍼 |
+| `pipeline/indexer.py` | Chroma + BM25 인덱서 |
+| `pipeline/index_all.py` | 전체 인덱스 재구축 (Chroma 손상 복구 시 사용) |
 
 ### API 엔드포인트 - `rag/server.py`
 
@@ -93,8 +96,8 @@ GET  /          → ui/index.html (정적 파일 서빙)
 
 ## 데이터
 
-- **Chroma**: 648개 청크 / **BM25**: 450개 청크
-- **보충 데이터** (`data/supplementary/`): 91개 (패키지 51, 이벤트 19, 액티비티 2, 반려동물 6, 연락처 5 등)
+- **Chroma/BM25**: 638개 청크 (clean + deep_processed + supplementary 통합)
+- **보충 데이터** (`data/supplementary/`): 91개 (패키지 51, 이벤트 19, 액티비티 2, 반려동물 6, 연락처 5, 조식 3 등)
 - **인덱스**: `data/index/chroma/`, `data/index/bm25_index.pkl`
 - **청킹**: 300~600 토큰 단위, FAQ는 Q/A 쌍 유지
 
@@ -107,6 +110,7 @@ GET  /          → ui/index.html (정적 파일 서빙)
 - 답변에 출처 URL 필수
 - 개인정보(예약번호/카드번호) 요구 금지
 - 근거 부족 시: "확인이 어렵습니다" + 공식 채널 안내
+- 교통편/지하철 노선 등 구체적 경로 정보 창작 금지
 
 ## 코드 스타일
 
@@ -116,9 +120,9 @@ GET  /          → ui/index.html (정적 파일 서빙)
 - 주석: 한글
 - 커밋 메시지: 영문
 
-## 현재 상태 (2026-02-07)
+## 현재 상태 (2026-02-09)
 
 - **정확도**: 100% (50/50 골든 QA) + 멀티턴 100% (22/22)
-- **완료 Phase**: 17개 + Security Patch 2개 (Phase 1~17, S1~S2)
+- **할루시네이션율**: 0.0%
+- **완료 Phase**: 18개 + Security Patch 2개
 - **상세 이력**: `doc/changelog.md`
-- **세션 컨텍스트**: `doc/session.md`

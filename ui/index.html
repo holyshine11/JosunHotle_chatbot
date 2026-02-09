@@ -11,6 +11,10 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <!-- 스타일시트 -->
   <link rel="stylesheet" href="css/style.css">
+  <!-- TTS 모듈 -->
+  <script src="js/tts/textPreprocessor.js"></script>
+  <script src="js/tts/ttsEngine.js"></script>
+  <script src="js/tts/sttEngine.js"></script>
   <script>
     // Tailwind 다크모드 설정
     tailwind.config = {
@@ -292,6 +296,24 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                 </svg>
               </button>
+              ${typeof STTEngine !== 'undefined' && STTEngine.isAvailable() ? `
+              <button
+                data-action="stt-toggle"
+                class="stt-btn p-3 rounded-xl transition-all duration-200
+                  ${STTEngine.getState() === 'listening'
+                    ? 'bg-red-500 text-white stt-recording'
+                    : (state.isSending || !h
+                      ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400')
+                  }"
+                ${state.isSending || !h ? 'disabled' : ''}
+                title="${STTEngine.getState() === 'listening' ? '녹음 중... 클릭하면 종료' : '음성으로 입력'}"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                </svg>
+              </button>
+              ` : ''}
             </div>
             <p class="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2 sm:mt-3 text-center">
               AI 챗봇은 간혹 사실과 다른 내용이 포함될 수 있습니다.
@@ -379,25 +401,72 @@
         const elapsed = thinkingStartTime ? Math.floor((Date.now() - thinkingStartTime) / 1000) : 0;
         return `
           <div class="flex justify-start message-enter">
-            <div class="max-w-[90%] sm:max-w-[85%]">
-              <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
-              </p>
-              <div class="space-y-2 sm:space-y-3">
-                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
-                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
+            <div class="max-w-[85%] sm:max-w-[80%] bellboy-card">
+              <div class="bellboy-banner">
+                <img src="/static/bell_boy.png" alt="벨보이" class="bellboy-avatar bellboy-banner-img">
+              </div>
+              <div class="bellboy-card-body">
+                <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
+                  <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                  생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
+                </p>
+                <div class="space-y-2 sm:space-y-3">
+                  <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
+                  <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
+                </div>
               </div>
             </div>
           </div>
         `;
       }
 
-      const content = isUser ? escapeHtml(msg.content) : renderMarkdown(msg.content);
+      const content = isUser ? escapeHtml(msg.content) : renderMarkdown(deduplicateRefs(msg.content));
 
-      // 봇 응답에 타임스탬프 표시
+      // TTS 버튼 (봇 응답 전용)
+      const ttsButton = (!isUser && msg.status === 'done' && typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable())
+        ? (() => {
+            const ttsState = TTSEngine.getState(msg.id);
+            const isPlaying = ttsState === 'playing';
+            const isPaused = ttsState === 'paused';
+            const isLoading = ttsState === 'loading';
+            const iconPlay = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>';
+            const iconPause = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+            const iconStop = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10h6v4H9z"/></svg>';
+
+            // 음성 생성 중 (로딩)
+            if (isLoading) {
+              return `<div class="flex items-center gap-1.5">
+                <span class="tts-btn tts-btn-active animate-pulse" title="음성 생성 중...">${iconPlay}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">음성 준비 중...</span>
+              </div>`;
+            }
+
+            if (isPlaying || isPaused) {
+              return `<div class="flex items-center gap-1.5">
+                <button data-action="tts-toggle" data-msg-id="${msg.id}"
+                  class="tts-btn ${isPlaying ? 'tts-btn-active' : ''}" title="${isPlaying ? '일시정지' : '재개'}">
+                  ${isPlaying ? iconPause : iconPlay}
+                </button>
+                <button data-action="tts-stop" data-msg-id="${msg.id}"
+                  class="tts-btn" title="정지">
+                  ${iconStop}
+                </button>
+                ${isPlaying ? '<span class="tts-playing-indicator"><span></span><span></span><span></span></span>' : ''}
+              </div>`;
+            }
+            return `<button data-action="tts-toggle" data-msg-id="${msg.id}"
+              class="tts-btn" title="음성으로 듣기">
+              ${iconPlay}
+            </button>`;
+          })()
+        : '';
+
+      // 봇 응답에 타임스탬프 + TTS 버튼 (한 줄)
       const timeInfo = (!isUser && msg.timestamp && msg.elapsedTime !== undefined)
-        ? `<p class="text-xs sm:text-sm text-gray-400 dark:text-gray-500 mt-2 sm:mt-3">${msg.timestamp} (${String(msg.elapsedTime).padStart(2, '0')}s)</p>`
+        ? `<div class="flex items-center gap-2 mt-2 sm:mt-3">
+            <span class="text-xs sm:text-sm text-gray-400 dark:text-gray-500">${msg.timestamp} (${String(msg.elapsedTime).padStart(2, '0')}s)</span>
+            ${ttsButton}
+          </div>`
         : '';
 
       // 명확화 옵션 버튼 렌더링
@@ -414,18 +483,65 @@
           </div>`
         : '';
 
+      // 벨보이 아바타 (봇 메시지 전용 — 답변 위에 배너형 배치)
+      const hasBellboy = (!isUser && msg.status === 'done');
+      const bellboyHtml = hasBellboy ? (() => {
+        const ttsState = typeof TTSEngine !== 'undefined' ? TTSEngine.getState(msg.id) : 'idle';
+        const isActive = ttsState === 'playing';  // 실제 발화 중일 때만 GIF
+        const imgSrc = isActive ? '/static/bell_boy_play.gif' : '/static/bell_boy.png';
+        return { imgSrc, isActive };
+      })() : null;
+
+      if (isUser) {
+        return `
+          <div class="flex justify-end message-enter">
+            <div class="max-w-[85%] sm:max-w-[80%] bg-gradient-to-br from-primary to-primary-hover text-white rounded-2xl rounded-br-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
+              <div class="text-sm sm:text-base">${content}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (bellboyHtml) {
+        return `
+          <div class="flex justify-start message-enter">
+            <div class="max-w-[85%] sm:max-w-[80%] bellboy-card ${bellboyHtml.isActive ? 'bellboy-speaking' : ''}">
+              <div class="bellboy-banner">
+                <img src="${bellboyHtml.imgSrc}" alt="벨보이" class="bellboy-avatar bellboy-banner-img">
+              </div>
+              <div class="bellboy-card-body">
+                <div class="text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200">${content}</div>
+                ${clarificationButtons}
+                ${timeInfo}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       return `
-        <div class="flex ${isUser ? 'justify-end' : 'justify-start'} message-enter">
-          <div class="max-w-[90%] sm:max-w-[85%] ${isUser
-            ? 'bg-gradient-to-br from-primary to-primary-hover text-white rounded-2xl rounded-br-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm'
-            : 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm'
-          }">
-            <div class="${isUser ? 'text-sm sm:text-base' : 'text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200'}">${content}</div>
+        <div class="flex justify-start message-enter">
+          <div class="max-w-[85%] sm:max-w-[80%] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
+            <div class="text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200">${content}</div>
             ${clarificationButtons}
             ${timeInfo}
           </div>
         </div>
       `;
+    }
+
+    function deduplicateRefs(text) {
+      // "참고 정보:" 라인 중복 제거 (동일 URL이면 첫 번째만 유지)
+      const lines = text.split('\n');
+      const seen = new Set();
+      return lines.filter(line => {
+        const match = line.match(/^참고\s*정보\s*:?\s*(https?:\/\/\S+)/);
+        if (match) {
+          if (seen.has(match[1])) return false;
+          seen.add(match[1]);
+        }
+        return true;
+      }).join('\n');
     }
 
     function renderMarkdown(text) {
@@ -520,6 +636,13 @@
             clarificationType: response.clarificationType || null,
             originalQuery: response.originalQuery || null
           };
+
+          // 답변 수신 즉시 TTS 자동 재생 (에러/명확화/STT녹음 중 제외)
+          const sttActive = typeof STTEngine !== 'undefined' && STTEngine.getState() === 'listening';
+          if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable()
+              && response.answer && !response.needsClarification && !sttActive) {
+            TTSEngine.play(response.answer, thinkingId);
+          }
         }
       } catch (error) {
         console.error('API 에러:', error);
@@ -566,6 +689,9 @@
           const hotelId = target.dataset.hotelId;
           const newHotel = HOTELS.find(h => h.id === hotelId);
           if (newHotel) {
+            if (state.currentHotel && state.currentHotel.id !== hotelId) {
+              if (typeof TTSEngine !== 'undefined') TTSEngine.stop();
+            }
             if (state.currentHotel && state.currentHotel.id !== hotelId && state.messages.length > 0) {
               state.messages.push({ id: Date.now(), role: 'system', content: `${newHotel.name}(으)로 변경됨` });
             }
@@ -576,6 +702,7 @@
           break;
 
         case 'new-chat':
+          if (typeof TTSEngine !== 'undefined') TTSEngine.stop();
           state.messages = [];
           state.sessionId = null;  // 세션 초기화
           render();
@@ -602,6 +729,27 @@
             render();
           }
           break;
+
+        case 'stt-toggle': {
+          if (typeof STTEngine !== 'undefined') {
+            STTEngine.toggle();
+          }
+          break;
+        }
+
+        case 'tts-toggle': {
+          const msgId = Number(target.dataset.msgId);
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg) {
+            TTSEngine.toggle(msg.content, msgId);
+          }
+          break;
+        }
+
+        case 'tts-stop': {
+          TTSEngine.stop();
+          break;
+        }
 
         case 'clarification-option':
           const selectedOption = target.dataset.option;
@@ -640,6 +788,29 @@
           break;
       }
     });
+
+    // ========== STT 콜백 ==========
+    if (typeof STTEngine !== 'undefined' && STTEngine.isAvailable()) {
+      // 음성 인식 완료 → 입력창에 적용 후 자동 전송
+      STTEngine.onResult = (transcript) => {
+        const input = document.getElementById('message-input');
+        if (input && state.currentHotel && !state.isSending) {
+          input.value = transcript;
+          handleSend();
+        }
+      };
+      // 상태 변경 → UI 갱신 (녹음 중 표시)
+      STTEngine.onStateChange = (sttState) => {
+        render();
+      };
+    }
+
+    // ========== TTS 상태 변경 콜백 ==========
+    if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable()) {
+      TTSEngine.onStateChange = (msgId, ttsState) => {
+        render();
+      };
+    }
 
     // ========== 초기화 ==========
     initTheme();

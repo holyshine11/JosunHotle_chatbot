@@ -521,6 +521,146 @@ body {
   letter-spacing: 0.3px;
 }
 
+/* ========== TTS 버튼 ========== */
+.tts-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: transparent;
+  transition: all var(--transition-fast);
+}
+
+.tts-btn:hover {
+  color: var(--color-accent);
+  background-color: var(--color-bg-hover);
+}
+
+.tts-btn-active {
+  color: var(--color-accent);
+}
+
+/* TTS 재생 중 이퀄라이저 애니메이션 */
+.tts-playing-indicator {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  margin-left: 4px;
+}
+
+.tts-playing-indicator span {
+  display: block;
+  width: 3px;
+  background-color: var(--color-accent);
+  border-radius: 1px;
+  animation: ttsEqualizer 0.8s ease-in-out infinite;
+}
+
+.tts-playing-indicator span:nth-child(1) { height: 8px; animation-delay: 0s; }
+.tts-playing-indicator span:nth-child(2) { height: 12px; animation-delay: 0.2s; }
+.tts-playing-indicator span:nth-child(3) { height: 6px; animation-delay: 0.4s; }
+
+@keyframes ttsEqualizer {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+/* 다크모드 TTS */
+[data-theme="dark"] .tts-btn {
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .tts-btn:hover {
+  color: var(--color-accent);
+  background-color: var(--color-bg-hover);
+}
+
+/* ========== 벨보이 아바타 ========== */
+.bellboy-avatar {
+  object-fit: cover;
+  background-color: var(--color-bg-white);
+}
+
+/* 카드형 래퍼 (배너 + 메시지를 하나로 감쌈) */
+.bellboy-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  background-color: var(--color-bg-white);
+}
+
+.dark .bellboy-card {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+/* 배너 영역 (아바타 이미지) */
+.bellboy-banner {
+  width: 100%;
+  background-color: var(--color-bg-white);
+}
+
+.dark .bellboy-banner {
+  background-color: #1e293b;
+}
+
+/* 배너 안의 이미지 */
+.bellboy-banner-img {
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  object-position: center;
+  border: none;
+  box-shadow: none;
+}
+
+@media (min-width: 640px) {
+  .bellboy-banner-img {
+    height: 220px;
+  }
+}
+
+/* 카드 하단 텍스트 영역 */
+.bellboy-card-body {
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dark .bellboy-card-body {
+  border-top-color: #334155;
+}
+
+/* TTS 재생 시 카드 전체에 은은한 골드 글로우 */
+.bellboy-card.bellboy-speaking {
+  border-color: rgba(201, 169, 97, 0.4);
+  animation: bellboySpeakPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes bellboySpeakPulse {
+  0% { box-shadow: 0 0 0 0 rgba(201, 169, 97, 0.3); }
+  70% { box-shadow: 0 0 0 8px rgba(201, 169, 97, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 169, 97, 0); }
+}
+
+/* ========== STT 녹음 버튼 ========== */
+.stt-recording {
+  animation: sttPulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+}
+
+@keyframes sttPulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
 /* ========== 반응형 개선 ========== */
 @media (max-width: 640px) {
   .title-premium {
