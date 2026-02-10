@@ -10,7 +10,7 @@
   <!-- Pretendard 폰트 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <!-- 스타일시트 -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=5">
   <!-- TTS 모듈 -->
   <script src="js/tts/textPreprocessor.js"></script>
   <script src="js/tts/ttsEngine.js"></script>
@@ -199,8 +199,7 @@
       app.innerHTML = `
         <header class="border-b border-gray-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between flex-shrink-0 bg-white dark:bg-slate-800 transition-colors duration-300">
           <div class="flex items-center gap-2 sm:gap-3">
-            <span class="text-accent-dark dark:text-accent text-xl sm:text-2xl font-bold tracking-tight">J</span>
-            <span class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 tracking-wide">Josun Hotel</span>
+            <span class="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 tracking-wide">Josun Chatbot</span>
           </div>
           <div class="flex items-center gap-2 sm:gap-4">
             <!-- 호텔 선택 드롭다운 -->
@@ -261,10 +260,10 @@
           </div>
         </header>
 
-        <div id="message-list" class="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900 transition-colors duration-300">
-          <div class="max-w-3xl mx-auto px-4 sm:px-5 py-6 sm:py-8">
-            ${state.messages.length === 0 ? renderEmptyState(h) : renderMessages()}
-          </div>
+        <div id="message-list" class="${state.messages.length > 0 ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto'} bg-gray-50 dark:bg-slate-900 transition-colors duration-300">
+          ${state.messages.length === 0
+            ? `<div class="max-w-3xl mx-auto px-4 sm:px-5 py-6 sm:py-8">${renderEmptyState(h)}</div>`
+            : renderMessages()}
         </div>
 
         <div class="border-t border-gray-200 dark:border-slate-700 p-3 sm:p-5 flex-shrink-0 bg-white dark:bg-slate-800 transition-colors duration-300">
@@ -341,11 +340,8 @@
       return `
         <div class="h-full flex items-center justify-center min-h-[60vh]">
           <div class="text-center px-4">
-            <div class="mb-6 sm:mb-8">
-              <span class="text-4xl sm:text-5xl font-bold text-accent">J</span>
-            </div>
             <p class="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6 sm:mb-8">
-              ${h ? h.name + '에 대해 질문해 주세요' : '호텔을 선택 후 질문해 주세요'}
+              ${h ? h.name + '에 대해 질문해 주세요' : '아래 호텔을 선택하시고 궁금한 내용을 질문해 주세요'}
             </p>
             <div class="flex flex-wrap justify-center gap-2 sm:gap-3 mb-8 sm:mb-10">
               ${HOTELS.map(hotel => `
@@ -379,7 +375,25 @@
     }
 
     function renderMessages() {
-      return `<div class="space-y-6 sm:space-y-8">${state.messages.map(renderMessage).join('')}</div>`;
+      // TTS 재생 중이면 GIF, 아니면 정적 이미지
+      const isTtsPlaying = typeof TTSEngine !== 'undefined' && TTSEngine._state === 'playing';
+      const avatarSrc = isTtsPlaying ? '/static/bell_boy_play.gif' : '/static/bell_boy.png';
+      const speakingClass = isTtsPlaying ? 'avatar-speaking' : '';
+      const hotelName = state.currentHotel ? state.currentHotel.name : '';
+
+      return `
+        <div class="chat-avatar-section">
+          <div class="chat-avatar-wrap ${speakingClass}">
+            <img src="${avatarSrc}" alt="벨보이">
+          </div>
+          <div class="chat-avatar-name">${hotelName} AI 상담사 Jony</div>
+        </div>
+        <div class="chat-messages-area">
+          <div class="max-w-3xl mx-auto px-4 sm:px-5">
+            <div class="space-y-4 sm:space-y-6">${state.messages.map(renderMessage).join('')}</div>
+          </div>
+        </div>
+      `;
     }
 
     function renderMessage(msg, index) {
@@ -401,19 +415,14 @@
         const elapsed = thinkingStartTime ? Math.floor((Date.now() - thinkingStartTime) / 1000) : 0;
         return `
           <div class="flex justify-start message-enter">
-            <div class="max-w-[85%] sm:max-w-[80%] bellboy-card">
-              <div class="bellboy-banner">
-                <img src="/static/bell_boy.png" alt="벨보이" class="bellboy-avatar bellboy-banner-img">
-              </div>
-              <div class="bellboy-card-body">
-                <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
-                  <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                  생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
-                </p>
-                <div class="space-y-2 sm:space-y-3">
-                  <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
-                  <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
-                </div>
+            <div class="max-w-[85%] sm:max-w-[80%] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
+              <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+                생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
+              </p>
+              <div class="space-y-2 sm:space-y-3">
+                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
+                <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
               </div>
             </div>
           </div>
@@ -483,37 +492,11 @@
           </div>`
         : '';
 
-      // 벨보이 아바타 (봇 메시지 전용 — 답변 위에 배너형 배치)
-      const hasBellboy = (!isUser && msg.status === 'done');
-      const bellboyHtml = hasBellboy ? (() => {
-        const ttsState = typeof TTSEngine !== 'undefined' ? TTSEngine.getState(msg.id) : 'idle';
-        const isActive = ttsState === 'playing';  // 실제 발화 중일 때만 GIF
-        const imgSrc = isActive ? '/static/bell_boy_play.gif' : '/static/bell_boy.png';
-        return { imgSrc, isActive };
-      })() : null;
-
       if (isUser) {
         return `
           <div class="flex justify-end message-enter">
             <div class="max-w-[85%] sm:max-w-[80%] bg-gradient-to-br from-primary to-primary-hover text-white rounded-2xl rounded-br-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
               <div class="text-sm sm:text-base">${content}</div>
-            </div>
-          </div>
-        `;
-      }
-
-      if (bellboyHtml) {
-        return `
-          <div class="flex justify-start message-enter">
-            <div class="max-w-[85%] sm:max-w-[80%] bellboy-card ${bellboyHtml.isActive ? 'bellboy-speaking' : ''}">
-              <div class="bellboy-banner">
-                <img src="${bellboyHtml.imgSrc}" alt="벨보이" class="bellboy-avatar bellboy-banner-img">
-              </div>
-              <div class="bellboy-card-body">
-                <div class="text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200">${content}</div>
-                ${clarificationButtons}
-                ${timeInfo}
-              </div>
             </div>
           </div>
         `;
@@ -559,8 +542,11 @@
     }
 
     function scrollToBottom() {
+      // 채팅 영역이 분리된 경우 .chat-messages-area를 스크롤
+      const area = document.querySelector('.chat-messages-area');
       const list = document.getElementById('message-list');
-      if (list) setTimeout(() => list.scrollTop = list.scrollHeight, 50);
+      const target = area || list;
+      if (target) setTimeout(() => target.scrollTop = target.scrollHeight, 50);
     }
 
     // ========== 타이머 함수 ==========
