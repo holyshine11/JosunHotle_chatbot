@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-09T21:53:44.181Z",
+  "lastUpdated": "2026-02-10T07:18:21.942Z",
   "activeFeatures": [
     "rag",
     "tests",
@@ -23,9 +23,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-05T03:31:29.885Z",
-        "lastUpdated": "2026-02-09T07:01:01.729Z"
+        "lastUpdated": "2026-02-10T04:37:55.803Z"
       },
-      "lastFile": "/Users/Dev/josun_chatbot/rag/server.py"
+      "lastFile": "/Users/Dev/josun_chatbot/rag/graph.py"
     },
     "tests": {
       "phase": "do",
@@ -114,9 +114,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-07T13:45:23.534Z",
-        "lastUpdated": "2026-02-07T13:45:23.534Z"
+        "lastUpdated": "2026-02-10T07:18:21.942Z"
       },
-      "lastFile": "/Users/Dev/josun_chatbot/crawler/crawl_api.py"
+      "lastFile": "/Users/Dev/josun_chatbot/crawler/process_menu_data.py"
     },
     "tts": {
       "phase": "do",
@@ -140,7 +140,7 @@
   "session": {
     "startedAt": "2026-02-05T02:34:37.244Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-09T21:53:44.181Z"
+    "lastActivity": "2026-02-10T07:18:21.942Z"
   },
   "history": [
     {
@@ -1586,6 +1586,108 @@
     {
       "timestamp": "2026-02-09T21:53:44.181Z",
       "feature": "tts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T00:53:29.556Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:16:31.568Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:16:40.913Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:19:20.783Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:19:27.133Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:19:40.259Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:22:19.781Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:23:47.680Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T01:25:43.421Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T04:37:55.803Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:34:12.917Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:38:08.184Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:41:04.134Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:41:20.535Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:42:56.518Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T06:43:03.901Z",
+      "feature": "crawler",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-10T07:18:21.942Z",
+      "feature": "crawler",
       "phase": "do",
       "action": "updated"
     }

@@ -244,10 +244,20 @@ class RAGGraph:
 
         queryLower = query.lower()
         currentTopic = None
+        # 복합 주제 감지: "레스토랑 위치" → "다이닝" + "위치"
+        # 구체적 대상(다이닝, 시설 등)이 우선하도록 전체 매칭 후 우선순위 적용
+        allMatchedTopics = []
         for topic, keywords in topicGroups.items():
             if any(kw in queryLower for kw in keywords):
-                currentTopic = topic
-                break
+                allMatchedTopics.append(topic)
+
+        # 우선순위: 구체적 대상 > 일반 속성 (위치/교통은 수식어일 수 있음)
+        generalTopics = {"위치", "교통", "연락처"}
+        specificMatches = [t for t in allMatchedTopics if t not in generalTopics]
+        if specificMatches:
+            currentTopic = specificMatches[0]
+        elif allMatchedTopics:
+            currentTopic = allMatchedTopics[0]
 
         # 현재 질문에 명확한 주제가 있으면 히스토리 주제와 비교
         if currentTopic:
@@ -469,9 +479,16 @@ class RAGGraph:
         ]
 
         # 질문에 이미 구체적인 대상이 있으면 명확화 불필요
+        # 단, "교통" AMBIGUOUS_PATTERNS 키워드가 원본 쿼리에 있으면 교통 명확화 우선
+        transportKeywords = self.AMBIGUOUS_PATTERNS.get("교통", {}).get("keywords", [])
+        transportExcludes = self.AMBIGUOUS_PATTERNS.get("교통", {}).get("excludes", [])
+        hasTransportKeyword = any(kw in originalQueryLower for kw in transportKeywords)
+        hasTransportExclude = any(exc in originalQueryLower for exc in transportExcludes)
+        isTransportAmbiguous = hasTransportKeyword and not hasTransportExclude
+
         hasSpecificTarget = any(target in queryLower for target in specificTargets)
 
-        if hasSpecificTarget:
+        if hasSpecificTarget and not isTransportAmbiguous:
             return {
                 **state,
                 "needs_clarification": False,
@@ -504,6 +521,12 @@ class RAGGraph:
             if matchedKeywords:
                 # ★ 주체 추출: 모호 키워드 제거 후 남는 엔티티
                 subjectEntity = self._extractSubjectEntity(originalQuery, matchedKeywords)
+
+                # 교통 패턴: "호텔"은 주체가 아님 (출발지가 핵심)
+                if patternKey == "교통" and subjectEntity:
+                    transportNonSubjects = ["호텔", "숙소", "리조트", "호텔로", "호텔까지", "호텔에"]
+                    if any(ns in subjectEntity for ns in transportNonSubjects):
+                        subjectEntity = None
 
                 if subjectEntity:
                     # 주체가 있음 → 모호하지 않음 → 명확화 불필요, 바로 검색
@@ -981,6 +1004,8 @@ class RAGGraph:
 - 컨텍스트에 없는 시설명/레스토랑명/브랜드명 창작 금지
 - 컨텍스트에 없는 운영시간/가격 창작 금지
 - 지하철 노선(N호선), 버스 번호, 교통 경로 정보를 절대 창작하지 마세요
+- 교통편(택시 요금, 소요 시간, 환승 경로) 정보는 반드시 컨텍스트에 있는 내용만 답변하세요
+- 출발지별 경로 정보가 컨텍스트에 없으면 "정확한 교통 정보를 찾을 수 없습니다"라고 답변하세요
 - 질문 주제와 무관한 정보를 답변에 포함하지 마세요 (예: 객실 질문에 교통편 정보 혼합 금지)"""
 
         userPrompt = f"""[참고 정보]
@@ -1013,16 +1038,35 @@ class RAGGraph:
             # 후처리: 중국어/일본어 문자 제거 (qwen 모델의 할루시네이션 방지)
             # 중국어 한자 범위: \u4e00-\u9fff
             # 일본어 히라가나/가타카나: \u3040-\u30ff
+
+            # 1) 3글자 이상 연속 한자 → 해당 지점부터 잘라내기
             chinesePart = re.search(r'[\u4e00-\u9fff]{3,}', answer)
             if chinesePart:
-                # 중국어가 시작되는 지점에서 자르기
                 cutIndex = chinesePart.start()
                 answer = answer[:cutIndex].strip()
-                # 문장이 잘렸으면 마무리
                 if answer and not answer.endswith(('.', '다', '요', '!')):
                     answer = answer.rstrip(',.;:')
                     if answer:
                         answer += "."
+
+            # 2) 개별 한자/일본어 문자를 한글 대체어로 치환
+            chineseToKorean = {
+                '휴': '휴식', '憩': '', '息': '', '食': '식',
+                '堂': '당', '館': '관', '室': '실', '場': '장',
+                '時': '시', '分': '분', '間': '간', '日': '일',
+                '月': '월', '年': '년', '名': '명', '人': '인',
+                '無': '무', '有': '유', '可': '가', '不': '불',
+            }
+            for char, replacement in chineseToKorean.items():
+                answer = answer.replace(char, replacement)
+
+            # 3) 남은 한자/일본어 문자 일괄 제거
+            answer = re.sub(r'[\u4e00-\u9fff\u3040-\u30ff]+', '', answer)
+            # 중국어 문장부호 → 한국어 문장부호
+            answer = answer.replace('。', '.').replace('，', ', ').replace('！', '!').replace('？', '?')
+            # 연속 공백/마침표 정리
+            answer = re.sub(r'\s{2,}', ' ', answer).strip()
+            answer = re.sub(r'\.{2,}', '.', answer)
 
             return answer
         except Exception as e:
@@ -1976,11 +2020,22 @@ class RAGGraph:
 
         # 근거 검증 실패 시 기본 답변
         if not state["evidence_passed"]:
+            fallbackAnswer = f"죄송합니다, 해당 내용으로 정확한 정보를 찾을 수 없습니다.\n자세한 사항은 {contactGuide}로 문의 부탁드립니다."
+
+            # 교통 관련 질문이면 위치 안내 URL 추가
+            transportKeywords = ["가는 방법", "오시는 길", "오시는길", "어떻게 가", "찾아가는", "교통편", "가는 길", "가는길"]
+            queryLower = query.lower()
+            isTransportQuery = any(kw in queryLower for kw in transportKeywords)
+            if isTransportQuery:
+                locationUrl = hotelInfo.get("locationUrl", "")
+                if locationUrl:
+                    fallbackAnswer = f"죄송합니다, 해당 출발지에서의 정확한 교통 정보를 찾을 수 없습니다.\n호텔 위치 및 오시는 길 안내 페이지를 참고해 주세요: {locationUrl}\n추가 문의는 {contactGuide}로 부탁드립니다."
+
             return {
                 **state,
                 "policy_passed": True,
                 "policy_reason": "근거 부족으로 기본 답변",
-                "final_answer": f"죄송합니다, 해당 내용으로 정확한 정보를 찾을 수 없습니다.\n자세한 사항은 {contactGuide}로 문의 부탁드립니다.",
+                "final_answer": fallbackAnswer,
             }
 
         # 출처 추가

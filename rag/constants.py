@@ -379,6 +379,15 @@ AMBIGUOUS_PATTERNS = {
         "options": ["호텔 위치/찾아오는 길", "수영장", "피트니스", "레스토랑", "스파"],
         "question": "어떤 시설의 위치를 알고 싶으신가요?",
     },
+    "교통": {
+        "keywords": ["가는 방법", "오시는 길", "오시는길", "어떻게 가", "찾아가는", "교통편", "가는 길", "가는길"],
+        "excludes": [
+            "인천공항", "김포공항", "공항에서", "부산역", "서울역", "KTX",
+            "셔틀", "리무진", "공항버스", "공항리무진",
+        ],
+        "options": ["인천공항에서", "김포공항에서", "서울역/부산역에서", "호텔 주소/위치 안내"],
+        "question": "어디에서 출발하시나요?",
+    },
 }
 
 # 맥락 인식 명확화 패턴
@@ -433,9 +442,9 @@ MIN_QUERY_LENGTH = 3
 
 # 호텔 정보 (이름, 연락처)
 HOTEL_INFO = {
-    "josun_palace": {"name": "조선 팰리스", "phone": "02-727-7200"},
-    "grand_josun_busan": {"name": "그랜드 조선 부산", "phone": "051-922-5000"},
-    "grand_josun_jeju": {"name": "그랜드 조선 제주", "phone": "064-735-8000"},
-    "lescape": {"name": "레스케이프", "phone": "02-317-4000"},
-    "gravity_pangyo": {"name": "그래비티 판교", "phone": "031-539-4800"},
+    "josun_palace": {"name": "조선 팰리스", "phone": "02-727-7200", "locationUrl": "https://jpg.josunhotel.com/about/location.do"},
+    "grand_josun_busan": {"name": "그랜드 조선 부산", "phone": "051-922-5000", "locationUrl": "https://gjb.josunhotel.com/about/location.do"},
+    "grand_josun_jeju": {"name": "그랜드 조선 제주", "phone": "064-735-8000", "locationUrl": "https://gjj.josunhotel.com/about/location.do"},
+    "lescape": {"name": "레스케이프", "phone": "02-317-4000", "locationUrl": "https://les.josunhotel.com/about/location.do"},
+    "gravity_pangyo": {"name": "그래비티 판교", "phone": "031-539-4800", "locationUrl": "https://grp.josunhotel.com/about/location.do"},
 }

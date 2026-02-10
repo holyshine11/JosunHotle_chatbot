@@ -71,7 +71,7 @@
       "query": "그랜드 조선 부산 아리아 레스토랑 정보",
       "hotel": "grand_josun_busan",
       "category": "다이닝",
-      "expected_keywords": ["051-922", "뷔페", "Buffet", "시푸드", "Seafood"],
+      "expected_keywords": ["051-922", "뷔페", "Buffet", "시푸드", "Seafood", "2층", "11:30"],
       "forbidden_keywords": ["제주"],
       "min_score": 0.7
     },
