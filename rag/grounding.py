@@ -3,11 +3,15 @@ Grounding Gate 모듈
 - 문장 단위 근거 검증
 - 수치/키워드 토큰 매칭
 - 할루시네이션 방지
+- 전화번호/URL/날짜 정보 검증
+- 부정어 뉘앙스 역전 감지
 """
 
 import re
 from typing import Optional, List
 from dataclasses import dataclass, field
+
+from rag.constants import GROUNDING_THRESHOLD
 
 
 @dataclass
@@ -46,6 +50,23 @@ class GroundingGate:
         (r'무료', "무료"),
         (r'유료', "유료"),
         (r'할인', "할인"),
+        # 전화번호 패턴 (날조 방지)
+        (r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', "전화번호"),
+        # 날짜/기간 패턴 (날조 방지)
+        (r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일', "날짜"),
+        (r'\d{1,2}월\s*\d{1,2}일', "날짜"),
+        # 층수 패턴
+        (r'\d+\s*층', "층수"),
+    ]
+
+    # 부정어-긍정어 대립 쌍 (뉘앙스 역전 감지용)
+    POLARITY_PAIRS = [
+        ("불가", "가능"),
+        ("금지", "허용"),
+        ("안됩니다", "됩니다"),
+        ("없습니다", "있습니다"),
+        ("불허", "허가"),
+        ("제한", "자유"),
     ]
 
     # 고유명사 패턴 (한글+영문 병기: 할루시네이션 위험 높음)
@@ -54,6 +75,8 @@ class GroundingGate:
         (r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)', "한영병기 시설명"),
         # "~ 레스토랑", "~ 카페" 등 시설 명칭
         (r'([가-힣A-Za-z]{2,}(?:\s+[가-힣A-Za-z]+)*)\s+(레스토랑|카페|바(?![가-힣])|라운지|센터|클럽)', "시설명"),
+        # "손종원 셰프", "김철수 대표" 등 인물명
+        (r'([가-힣]{2,4})\s*(셰프|쉐프|대표|오너|총괄|매니저|사장|원장|소믈리에)', "인물명"),
     ]
 
     # 질문 의도 분류 키워드
@@ -73,8 +96,8 @@ class GroundingGate:
         "휠체어", "장애인", "흡연", "음식물",
     ]
 
-    # 근거 검증 임계값
-    EVIDENCE_THRESHOLD = 0.45  # 나열형 답변 허용
+    # 근거 검증 임계값 (constants.py에서 관리)
+    EVIDENCE_THRESHOLD = GROUNDING_THRESHOLD
     NUMERIC_MATCH_REQUIRED = True  # 수치가 있으면 근거에도 반드시 있어야 함
 
     # 무시할 일반 표현 패턴 (LLM이 추가하는 설명)
@@ -266,6 +289,19 @@ class GroundingGate:
                         elif tokenType == "시간":
                             if token not in context:
                                 unverified.append(f"{token} ({tokenType})")
+            elif tokenType == "층수":
+                # 층수 정확 매칭 필요
+                numPart = re.search(r'\d+', token)
+                if numPart:
+                    floorNum = numPart.group()
+                    if not re.search(rf'{floorNum}\s*층', context):
+                        unverified.append(f"{token} ({tokenType})")
+            elif tokenType == "전화번호":
+                # 전화번호는 verifyPhoneNumbers에서 별도 검증 (중복 방지)
+                pass
+            elif tokenType == "날짜":
+                # 날짜는 verifyDateInfo에서 별도 검증 (중복 방지)
+                pass
             elif tokenType in ["무료", "유료", "할인"]:
                 # 키워드 존재 여부만 확인
                 if token not in context:
@@ -308,6 +344,109 @@ class GroundingGate:
                 return True
         return False
 
+    def verifyPhoneNumbers(self, answer: str, context: str) -> tuple[bool, list[str]]:
+        """답변의 전화번호가 근거에 있는지 검증
+
+        전화번호 날조는 심각한 할루시네이션이므로 정확 매칭 요구.
+        """
+        unverified = []
+        # 답변에서 전화번호 추출
+        phonePattern = r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}'
+        answerPhones = re.findall(phonePattern, answer)
+
+        if not answerPhones:
+            return True, []
+
+        for phone in answerPhones:
+            # 숫자만 추출하여 비교 (구분자 무시)
+            phoneDigits = re.sub(r'[^\d]', '', phone)
+            # 컨텍스트에서 동일 숫자열 찾기
+            contextPhones = re.findall(phonePattern, context)
+            found = False
+            for ctxPhone in contextPhones:
+                ctxDigits = re.sub(r'[^\d]', '', ctxPhone)
+                if phoneDigits == ctxDigits:
+                    found = True
+                    break
+            if not found:
+                # 컨텍스트에서 숫자 연속열로도 재검색
+                if phoneDigits in re.sub(r'[^\d]', '', context):
+                    found = True
+            if not found and len(phoneDigits) >= 8:
+                unverified.append(f"{phone} (전화번호)")
+
+        return len(unverified) == 0, unverified
+
+    def verifyDateInfo(self, answer: str, context: str) -> tuple[bool, list[str]]:
+        """답변의 날짜/기간 정보가 근거에 있는지 검증
+
+        날짜 정보 날조 방지 (이벤트 기간, 패키지 유효기간 등).
+        """
+        unverified = []
+
+        # 연월일 패턴
+        fullDatePattern = r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일'
+        monthDayPattern = r'(\d{1,2})월\s*(\d{1,2})일'
+
+        # 연월일 검증
+        for match in re.finditer(fullDatePattern, answer):
+            dateStr = match.group(0)
+            year, month, day = match.group(1), match.group(2), match.group(3)
+            # 컨텍스트에서 동일 날짜 찾기 (구분자 유연)
+            ctxPattern = rf'{year}\s*[년./-]\s*{int(month)}\s*[월./-]\s*{int(day)}\s*일?'
+            if not re.search(ctxPattern, context):
+                # 숫자 부분으로 재검색
+                simplePattern = rf'{year}[./\-]\s*{month.zfill(2)}[./\-]\s*{day.zfill(2)}'
+                if not re.search(simplePattern, context):
+                    unverified.append(f"{dateStr} (날짜)")
+
+        # 월일만 있는 경우 (연월일 패턴에 이미 매칭된 것 제외)
+        contextWithoutFullDate = re.sub(fullDatePattern, '', answer)
+        for match in re.finditer(monthDayPattern, contextWithoutFullDate):
+            dateStr = match.group(0)
+            month, day = match.group(1), match.group(2)
+            ctxPattern = rf'{int(month)}\s*[월./-]\s*{int(day)}\s*일?'
+            if not re.search(ctxPattern, context):
+                unverified.append(f"{dateStr} (날짜)")
+
+        return len(unverified) == 0, unverified
+
+    def checkPolarityReversal(self, claim: str, context: str) -> tuple[bool, str]:
+        """부정어/긍정어 뉘앙스 역전 감지
+
+        컨텍스트에서 "불가"라고 된 것을 "가능"으로 바꿔 말하는 등의
+        의미 역전 할루시네이션을 감지.
+
+        Returns:
+            (통과 여부, 문제 설명)
+        """
+        claimLower = claim.lower()
+
+        for negWord, posWord in self.POLARITY_PAIRS:
+            # claim에 긍정어가 있고, context의 해당 맥락에 부정어가 있는 경우
+            if posWord in claimLower and negWord not in claimLower:
+                # claim의 주제어 추출 (긍정어 주변 키워드)
+                claimWordsKo = set(re.findall(r'[가-힣]{2,}', claimLower))
+                claimWordsKo.discard(posWord)  # 긍정어 자체는 제외
+
+                if not claimWordsKo:
+                    continue
+
+                # 컨텍스트에서 부정어가 포함된 문장 찾기
+                contextSentences = re.split(r'[.\n]', context)
+                for ctxSent in contextSentences:
+                    ctxSentLower = ctxSent.lower().strip()
+                    if not ctxSentLower or negWord not in ctxSentLower:
+                        continue
+
+                    # 부정어 문장에 claim 주제어가 포함되면 → 역전 의심
+                    sentWordsKo = set(re.findall(r'[가-힣]{2,}', ctxSentLower))
+                    topicOverlap = claimWordsKo & sentWordsKo
+                    if len(topicOverlap) >= 2:
+                        return False, f"뉘앙스 역전 의심: 컨텍스트 '{negWord}' → 답변 '{posWord}' (주제: {topicOverlap})"
+
+        return True, ""
+
     def verifyProperNouns(self, text: str, context: str) -> tuple[bool, list[str]]:
         """고유명사가 컨텍스트에 존재하는지 검증"""
         unverified = []
@@ -327,6 +466,10 @@ class GroundingGate:
                 elif nounType == "시설명":
                     facilityName = match.group(1).strip()
                     if len(facilityName) >= 2 and facilityName.lower() not in contextLower:
+                        unverified.append(f"{fullMatch} ({nounType})")
+                elif nounType == "인물명":
+                    personName = match.group(1).strip()
+                    if personName.lower() not in contextLower:
                         unverified.append(f"{fullMatch} ({nounType})")
 
         return len(unverified) == 0, unverified
@@ -354,6 +497,30 @@ class GroundingGate:
         if hasNumeric:
             numericVerified, unverified = self.verifyNumericTokens(claim, context)
 
+        # 전화번호 검증 (날조 방지)
+        phoneVerified, phoneUnverified = self.verifyPhoneNumbers(claim, context)
+        if not phoneVerified:
+            return Claim(
+                text=claim,
+                evidence_span=evidenceSpan,
+                evidence_score=evidenceScore,
+                is_grounded=False,
+                has_numeric=True,
+                numeric_verified=False  # 전화번호 미검증
+            )
+
+        # 날짜/기간 검증 (날조 방지)
+        dateVerified, dateUnverified = self.verifyDateInfo(claim, context)
+        if not dateVerified:
+            return Claim(
+                text=claim,
+                evidence_span=evidenceSpan,
+                evidence_score=evidenceScore,
+                is_grounded=False,
+                has_numeric=True,
+                numeric_verified=False  # 날짜 미검증
+            )
+
         # 고유명사 검증 (컨텍스트에 없는 시설명 차단)
         properNounVerified, properNounUnverified = self.verifyProperNouns(claim, context)
         if not properNounVerified:
@@ -365,6 +532,18 @@ class GroundingGate:
                 is_grounded=False,
                 has_numeric=hasNumeric,
                 numeric_verified=False  # 고유명사 미검증 = 수치 미검증과 동급
+            )
+
+        # 부정어 뉘앙스 역전 검사
+        polarityOk, polarityReason = self.checkPolarityReversal(claim, context)
+        if not polarityOk:
+            return Claim(
+                text=claim,
+                evidence_span=evidenceSpan,
+                evidence_score=evidenceScore * 0.5,  # 점수 대폭 하락
+                is_grounded=False,
+                has_numeric=hasNumeric,
+                numeric_verified=numericVerified
             )
 
         # 최종 grounded 판정

@@ -1,6 +1,6 @@
 {
   "version": "1.1",
-  "description": "조선호텔 RAG 챗봇 평가용 테스트 데이터셋 (수정됨)",
+  "description": "조선호텔 RAG 챗봇 평가용 테스트 데이터셋 (할루시네이션 공격 테스트 포함)",
   "created_at": "2026-02-04",
   "test_cases": [
     {
@@ -8,8 +8,17 @@
       "query": "그랜드 조선 부산 체크인 시간",
       "hotel": "grand_josun_busan",
       "category": "체크인/아웃",
-      "expected_keywords": ["15:00", "오후 3시", "15시", "3시"],
-      "forbidden_keywords": ["제주", "팰리스", "레스케이프"],
+      "expected_keywords": [
+        "15:00",
+        "오후 3시",
+        "15시",
+        "3시"
+      ],
+      "forbidden_keywords": [
+        "제주",
+        "팰리스",
+        "레스케이프"
+      ],
       "min_score": 0.7
     },
     {
@@ -17,8 +26,16 @@
       "query": "그랜드 조선 제주 체크인 몇시에 가능해요?",
       "hotel": "grand_josun_jeju",
       "category": "체크인/아웃",
-      "expected_keywords": ["15:00", "오후 3시", "15시", "3시"],
-      "forbidden_keywords": ["부산", "팰리스"],
+      "expected_keywords": [
+        "15:00",
+        "오후 3시",
+        "15시",
+        "3시"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "팰리스"
+      ],
       "min_score": 0.7
     },
     {
@@ -26,8 +43,16 @@
       "query": "조선 팰리스 체크인 시간 알려줘",
       "hotel": "josun_palace",
       "category": "체크인/아웃",
-      "expected_keywords": ["15:00", "오후 3시", "15시", "3시"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "15:00",
+        "오후 3시",
+        "15시",
+        "3시"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -35,8 +60,17 @@
       "query": "레스케이프 체크인 시간",
       "hotel": "lescape",
       "category": "체크인/아웃",
-      "expected_keywords": ["15:00", "오후 3시", "15시", "3시"],
-      "forbidden_keywords": ["부산", "제주", "팰리스"],
+      "expected_keywords": [
+        "15:00",
+        "오후 3시",
+        "15시",
+        "3시"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주",
+        "팰리스"
+      ],
       "min_score": 0.7
     },
     {
@@ -44,8 +78,16 @@
       "query": "그래비티 판교 체크인 시간",
       "hotel": "gravity_pangyo",
       "category": "체크인/아웃",
-      "expected_keywords": ["15:00", "오후 3시", "15시", "3시"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "15:00",
+        "오후 3시",
+        "15시",
+        "3시"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -53,8 +95,15 @@
       "query": "부산 조선 체크아웃 몇시까지?",
       "hotel": "grand_josun_busan",
       "category": "체크인/아웃",
-      "expected_keywords": ["11:00", "오전 11시", "11시"],
-      "forbidden_keywords": ["제주", "팰리스"],
+      "expected_keywords": [
+        "11:00",
+        "오전 11시",
+        "11시"
+      ],
+      "forbidden_keywords": [
+        "제주",
+        "팰리스"
+      ],
       "min_score": 0.7
     },
     {
@@ -62,8 +111,18 @@
       "query": "그랜드 조선 부산 레스토랑 안내해줘",
       "hotel": "grand_josun_busan",
       "category": "다이닝",
-      "expected_keywords": ["Aria", "아리아", "Palais", "팔레", "Dining", "레스토랑"],
-      "forbidden_keywords": ["제주", "팰리스"],
+      "expected_keywords": [
+        "Aria",
+        "아리아",
+        "Palais",
+        "팔레",
+        "Dining",
+        "레스토랑"
+      ],
+      "forbidden_keywords": [
+        "제주",
+        "팰리스"
+      ],
       "min_score": 0.65
     },
     {
@@ -71,8 +130,18 @@
       "query": "그랜드 조선 부산 아리아 레스토랑 정보",
       "hotel": "grand_josun_busan",
       "category": "다이닝",
-      "expected_keywords": ["051-922", "뷔페", "Buffet", "시푸드", "Seafood", "2층", "11:30"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "051-922",
+        "뷔페",
+        "Buffet",
+        "시푸드",
+        "Seafood",
+        "2층",
+        "11:30"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -80,8 +149,14 @@
       "query": "부산 조선 아리아 운영시간",
       "hotel": "grand_josun_busan",
       "category": "다이닝",
-      "expected_keywords": ["08:00", "21:30", "운영"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "08:00",
+        "21:30",
+        "운영"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -89,8 +164,18 @@
       "query": "그랜드 조선 제주 레스토랑 종류",
       "hotel": "grand_josun_jeju",
       "category": "다이닝",
-      "expected_keywords": ["Aria", "아리아", "Peak", "피크", "Deli", "델리"],
-      "forbidden_keywords": ["부산", "팰리스"],
+      "expected_keywords": [
+        "Aria",
+        "아리아",
+        "Peak",
+        "피크",
+        "Deli",
+        "델리"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "팰리스"
+      ],
       "min_score": 0.65
     },
     {
@@ -98,8 +183,17 @@
       "query": "조선 팰리스 레스토랑 안내",
       "hotel": "josun_palace",
       "category": "다이닝",
-      "expected_keywords": ["Constans", "콘스탄스", "1914", "홍연", "층"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "Constans",
+        "콘스탄스",
+        "1914",
+        "홍연",
+        "층"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -107,8 +201,15 @@
       "query": "조선 팰리스 콘스탄스 전화번호",
       "hotel": "josun_palace",
       "category": "다이닝",
-      "expected_keywords": ["02-727", "7690", "문의", "예약"],
-      "forbidden_keywords": ["부산"],
+      "expected_keywords": [
+        "02-727",
+        "7690",
+        "문의",
+        "예약"
+      ],
+      "forbidden_keywords": [
+        "부산"
+      ],
       "min_score": 0.7
     },
     {
@@ -116,7 +217,10 @@
       "query": "팰리스 콘스탄스 위치",
       "hotel": "josun_palace",
       "category": "다이닝",
-      "expected_keywords": ["24층", "층"],
+      "expected_keywords": [
+        "24층",
+        "층"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -125,8 +229,19 @@
       "query": "레스케이프 레스토랑 안내해줘",
       "hotel": "lescape",
       "category": "다이닝",
-      "expected_keywords": ["L'Amant", "라망", "Palais", "팔레", "Marque", "마르퀴", "층"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "L'Amant",
+        "라망",
+        "Palais",
+        "팔레",
+        "Marque",
+        "마르퀴",
+        "층"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -134,8 +249,18 @@
       "query": "그래비티 판교 다이닝",
       "hotel": "gravity_pangyo",
       "category": "다이닝",
-      "expected_keywords": ["Andish", "앤디쉬", "Zerovity", "제로비티", "Voost", "부스트"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "Andish",
+        "앤디쉬",
+        "Zerovity",
+        "제로비티",
+        "Voost",
+        "부스트"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -143,7 +268,12 @@
       "query": "그래비티 앤디쉬 조식 시간",
       "hotel": "gravity_pangyo",
       "category": "다이닝",
-      "expected_keywords": ["06:30", "10:00", "조식", "Breakfast"],
+      "expected_keywords": [
+        "06:30",
+        "10:00",
+        "조식",
+        "Breakfast"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -152,8 +282,19 @@
       "query": "그랜드 조선 부산 수영장 운영시간",
       "hotel": "grand_josun_busan",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "08:00", "21:00", "수영", "6시", "10시", "Pool"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "06:00",
+        "22:00",
+        "08:00",
+        "21:00",
+        "수영",
+        "6시",
+        "10시",
+        "Pool"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -161,8 +302,19 @@
       "query": "그랜드 조선 제주 수영장 몇시까지?",
       "hotel": "grand_josun_jeju",
       "category": "부대시설",
-      "expected_keywords": ["21:00", "21:30", "09:00", "수영", "풀", "Pool", "문의", "064-735-8000"],
-      "forbidden_keywords": ["부산"],
+      "expected_keywords": [
+        "21:00",
+        "21:30",
+        "09:00",
+        "수영",
+        "풀",
+        "Pool",
+        "문의",
+        "064-735-8000"
+      ],
+      "forbidden_keywords": [
+        "부산"
+      ],
       "min_score": 0.7
     },
     {
@@ -170,8 +322,15 @@
       "query": "조선 팰리스 수영장 운영시간",
       "hotel": "josun_palace",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "수영"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "06:00",
+        "22:00",
+        "수영"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -179,7 +338,10 @@
       "query": "팰리스 수영장 위치",
       "hotel": "josun_palace",
       "category": "부대시설",
-      "expected_keywords": ["26층", "층"],
+      "expected_keywords": [
+        "26층",
+        "층"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -188,7 +350,12 @@
       "query": "조선 팰리스 피트니스 운영시간",
       "hotel": "josun_palace",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "24시간", "운영"],
+      "expected_keywords": [
+        "06:00",
+        "22:00",
+        "24시간",
+        "운영"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -197,7 +364,13 @@
       "query": "레스케이프 피트니스 시간",
       "hotel": "lescape",
       "category": "부대시설",
-      "expected_keywords": ["07:00", "22:00", "24시간", "운영", "Hours"],
+      "expected_keywords": [
+        "07:00",
+        "22:00",
+        "24시간",
+        "운영",
+        "Hours"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -206,7 +379,11 @@
       "query": "그래비티 판교 헬스장 운영시간",
       "hotel": "gravity_pangyo",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "운영"],
+      "expected_keywords": [
+        "06:00",
+        "22:00",
+        "운영"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -215,8 +392,14 @@
       "query": "부산 조선 사우나 운영시간",
       "hotel": "grand_josun_busan",
       "category": "부대시설",
-      "expected_keywords": ["06:00", "22:00", "운영"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "06:00",
+        "22:00",
+        "운영"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -224,8 +407,14 @@
       "query": "그랜드 조선 부산 전화번호",
       "hotel": "grand_josun_busan",
       "category": "연락처",
-      "expected_keywords": ["051-922-5000", "922-5000"],
-      "forbidden_keywords": ["제주", "팰리스"],
+      "expected_keywords": [
+        "051-922-5000",
+        "922-5000"
+      ],
+      "forbidden_keywords": [
+        "제주",
+        "팰리스"
+      ],
       "min_score": 0.65
     },
     {
@@ -233,8 +422,16 @@
       "query": "그랜드 조선 제주 연락처",
       "hotel": "grand_josun_jeju",
       "category": "연락처",
-      "expected_keywords": ["064-735-8000", "735-8000", "064-738-6600", "738-6600"],
-      "forbidden_keywords": ["부산", "팰리스"],
+      "expected_keywords": [
+        "064-735-8000",
+        "735-8000",
+        "064-738-6600",
+        "738-6600"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "팰리스"
+      ],
       "min_score": 0.65
     },
     {
@@ -242,8 +439,14 @@
       "query": "조선 팰리스 대표번호",
       "hotel": "josun_palace",
       "category": "연락처",
-      "expected_keywords": ["02-727-7200", "727-7200"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "02-727-7200",
+        "727-7200"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -251,8 +454,14 @@
       "query": "레스케이프 호텔 전화번호",
       "hotel": "lescape",
       "category": "연락처",
-      "expected_keywords": ["02-317-4000", "317-4000"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "02-317-4000",
+        "317-4000"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -260,8 +469,14 @@
       "query": "그래비티 판교 연락처",
       "hotel": "gravity_pangyo",
       "category": "연락처",
-      "expected_keywords": ["031-539-4800", "539-4800"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "031-539-4800",
+        "539-4800"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -269,7 +484,11 @@
       "query": "레스케이프 반려동물 동반 가능해?",
       "hotel": "lescape",
       "category": "반려동물",
-      "expected_keywords": ["가능", "동반", "반려"],
+      "expected_keywords": [
+        "가능",
+        "동반",
+        "반려"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -278,7 +497,12 @@
       "query": "레스케이프 강아지랑 갈 수 있어?",
       "hotel": "lescape",
       "category": "반려동물",
-      "expected_keywords": ["가능", "반려", "소형견", "10kg"],
+      "expected_keywords": [
+        "가능",
+        "반려",
+        "소형견",
+        "10kg"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -287,8 +511,14 @@
       "query": "강아지 데려가도 돼?",
       "hotel": "grand_josun_busan",
       "category": "반려동물",
-      "expected_keywords": ["반려", "동반", "불가"],
-      "forbidden_keywords": ["어떤 시설의 위치"],
+      "expected_keywords": [
+        "반려",
+        "동반",
+        "불가"
+      ],
+      "forbidden_keywords": [
+        "어떤 시설의 위치"
+      ],
       "min_score": 0.5,
       "description": "질문형 반려동물 - 직접 정책 안내"
     },
@@ -297,8 +527,14 @@
       "query": "개 대려갈게",
       "hotel": "josun_palace",
       "category": "반려동물",
-      "expected_keywords": ["반려동물", "어디를", "이용"],
-      "forbidden_keywords": ["어떤 시설의 위치"],
+      "expected_keywords": [
+        "반려동물",
+        "어디를",
+        "이용"
+      ],
+      "forbidden_keywords": [
+        "어떤 시설의 위치"
+      ],
       "min_score": 0.0,
       "description": "모호한 반려동물 - 맥락 맞춤 명확화 질문 (score=0 허용)"
     },
@@ -307,8 +543,16 @@
       "query": "조선 팰리스 주차 요금",
       "hotel": "josun_palace",
       "category": "주차",
-      "expected_keywords": ["주차", "발렛", "무료", "이용"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "주차",
+        "발렛",
+        "무료",
+        "이용"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -316,8 +560,16 @@
       "query": "그랜드 조선 부산 주차 가능해?",
       "hotel": "grand_josun_busan",
       "category": "주차",
-      "expected_keywords": ["주차", "무료", "발렛", "가능", "이용"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "주차",
+        "무료",
+        "발렛",
+        "가능",
+        "이용"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -325,8 +577,18 @@
       "query": "조선 팰리스 객실 종류",
       "hotel": "josun_palace",
       "category": "객실",
-      "expected_keywords": ["State", "Masters", "Suite", "스테이트", "마스터", "스위트"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "State",
+        "Masters",
+        "Suite",
+        "스테이트",
+        "마스터",
+        "스위트"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -334,8 +596,17 @@
       "query": "그랜드 조선 부산 객실 안내",
       "hotel": "grand_josun_busan",
       "category": "객실",
-      "expected_keywords": ["Superior", "Deluxe", "Premier", "Suite", "슈페리어", "디럭스"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "Superior",
+        "Deluxe",
+        "Premier",
+        "Suite",
+        "슈페리어",
+        "디럭스"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -343,8 +614,14 @@
       "query": "부산 조선 키즈룸 있어?",
       "hotel": "grand_josun_busan",
       "category": "객실",
-      "expected_keywords": ["키즈", "Kids", "어린이"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "키즈",
+        "Kids",
+        "어린이"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.7
     },
     {
@@ -352,8 +629,17 @@
       "query": "그랜드 조선 제주 객실 종류",
       "hotel": "grand_josun_jeju",
       "category": "객실",
-      "expected_keywords": ["Deluxe", "Suite", "Hill", "디럭스", "스위트", "힐"],
-      "forbidden_keywords": ["부산"],
+      "expected_keywords": [
+        "Deluxe",
+        "Suite",
+        "Hill",
+        "디럭스",
+        "스위트",
+        "힐"
+      ],
+      "forbidden_keywords": [
+        "부산"
+      ],
       "min_score": 0.65
     },
     {
@@ -361,8 +647,16 @@
       "query": "조선 팰리스 웨딩 문의",
       "hotel": "josun_palace",
       "category": "연회",
-      "expected_keywords": ["02-727", "7470", "웨딩", "연회"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "02-727",
+        "7470",
+        "웨딩",
+        "연회"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -370,8 +664,16 @@
       "query": "그랜드 조선 부산 연회장 문의",
       "hotel": "grand_josun_busan",
       "category": "연회",
-      "expected_keywords": ["051-922", "5111", "연회", "볼룸", "Ballroom"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "051-922",
+        "5111",
+        "연회",
+        "볼룸",
+        "Ballroom"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -379,7 +681,12 @@
       "query": "레스케이프 조식 시간",
       "hotel": "lescape",
       "category": "조식",
-      "expected_keywords": ["07:00", "10:30", "Breakfast", "조식"],
+      "expected_keywords": [
+        "07:00",
+        "10:30",
+        "Breakfast",
+        "조식"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.65
     },
@@ -388,7 +695,12 @@
       "query": "조선 팰리스 조식 운영시간",
       "hotel": "josun_palace",
       "category": "조식",
-      "expected_keywords": ["06:30", "10:00", "조식", "Breakfast"],
+      "expected_keywords": [
+        "06:30",
+        "10:00",
+        "조식",
+        "Breakfast"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.65
     },
@@ -397,8 +709,19 @@
       "query": "부산 조선 아침식사 시간",
       "hotel": "grand_josun_busan",
       "category": "조식",
-      "expected_keywords": ["06:30", "10:00", "08:00", "조식", "아침", "Breakfast", "델리", "Deli"],
-      "forbidden_keywords": ["제주"],
+      "expected_keywords": [
+        "06:30",
+        "10:00",
+        "08:00",
+        "조식",
+        "아침",
+        "Breakfast",
+        "델리",
+        "Deli"
+      ],
+      "forbidden_keywords": [
+        "제주"
+      ],
       "min_score": 0.65
     },
     {
@@ -406,7 +729,12 @@
       "query": "레스케이프 스파 운영시간",
       "hotel": "lescape",
       "category": "부대시설",
-      "expected_keywords": ["10:00", "21:00", "스파", "SPA"],
+      "expected_keywords": [
+        "10:00",
+        "21:00",
+        "스파",
+        "SPA"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -415,8 +743,16 @@
       "query": "조선 팰리스 주소",
       "hotel": "josun_palace",
       "category": "위치",
-      "expected_keywords": ["강남", "영동대로", "삼성", "서울"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "강남",
+        "영동대로",
+        "삼성",
+        "서울"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -424,8 +760,16 @@
       "query": "레스케이프 호텔 위치",
       "hotel": "lescape",
       "category": "위치",
-      "expected_keywords": ["명동", "중구", "을지로", "서울"],
-      "forbidden_keywords": ["부산", "제주"],
+      "expected_keywords": [
+        "명동",
+        "중구",
+        "을지로",
+        "서울"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주"
+      ],
       "min_score": 0.6
     },
     {
@@ -433,7 +777,12 @@
       "query": "조선 팰리스 아트 컬렉션 안내",
       "hotel": "josun_palace",
       "category": "기타",
-      "expected_keywords": ["아트", "Art", "작품", "컬렉션"],
+      "expected_keywords": [
+        "아트",
+        "Art",
+        "작품",
+        "컬렉션"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.7
     },
@@ -442,7 +791,12 @@
       "query": "예약 취소 정책 알려줘",
       "hotel": null,
       "category": "정책",
-      "expected_keywords": ["취소", "환불", "위약금", "변경"],
+      "expected_keywords": [
+        "취소",
+        "환불",
+        "위약금",
+        "변경"
+      ],
       "forbidden_keywords": [],
       "min_score": 0.6
     },
@@ -451,9 +805,273 @@
       "query": "그랜드 조선 제주 키즈클럽 운영시간",
       "hotel": "grand_josun_jeju",
       "category": "부대시설",
-      "expected_keywords": ["10:00", "18:00", "키즈", "Kids"],
-      "forbidden_keywords": ["부산"],
+      "expected_keywords": [
+        "10:00",
+        "18:00",
+        "키즈",
+        "Kids"
+      ],
+      "forbidden_keywords": [
+        "부산"
+      ],
       "min_score": 0.7
+    },
+    {
+      "id": "halluc_transport_001",
+      "query": "조선 팰리스 가려면 지하철 몇 호선 타야 해?",
+      "hotel": "josun_palace",
+      "category": "할루시네이션",
+      "expected_keywords": [],
+      "forbidden_keywords": [
+        "1호선",
+        "3호선",
+        "4호선",
+        "5호선",
+        "6호선",
+        "7호선",
+        "8호선"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_transport_002",
+      "query": "그랜드 조선 부산까지 택시로 얼마나 걸려?",
+      "hotel": "grand_josun_busan",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "확인",
+        "문의"
+      ],
+      "forbidden_keywords": [
+        "약 30분",
+        "약 20분",
+        "약 10분",
+        "약 40분",
+        "약 1시간",
+        "대략"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_price_001",
+      "query": "레스케이프 스위트룸 가격 알려줘",
+      "hotel": "lescape",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "문의",
+        "확인"
+      ],
+      "forbidden_keywords": [
+        "약 50만",
+        "약 30만",
+        "약 100만",
+        "대략"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_price_002",
+      "query": "그래비티 판교 조식 얼마야?",
+      "hotel": "gravity_pangyo",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "조식"
+      ],
+      "forbidden_keywords": [
+        "약",
+        "대략",
+        "대체로"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_facility_001",
+      "query": "조선 팰리스에 워터파크 있어?",
+      "hotel": "josun_palace",
+      "category": "할루시네이션",
+      "expected_keywords": [],
+      "forbidden_keywords": [
+        "운영하고 있습니다",
+        "이용하실 수 있습니다"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_facility_002",
+      "query": "그랜드 조선 부산 레스토랑 이름 알려줘",
+      "hotel": "grand_josun_busan",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "아리아",
+        "Aria"
+      ],
+      "forbidden_keywords": [
+        "제주",
+        "팰리스",
+        "레스케이프",
+        "판교"
+      ],
+      "min_score": 0.5
+    },
+    {
+      "id": "halluc_hours_001",
+      "query": "레스케이프 수영장 운영시간 알려줘",
+      "hotel": "lescape",
+      "category": "할루시네이션",
+      "expected_keywords": [],
+      "forbidden_keywords": [
+        "부산",
+        "제주",
+        "판교"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_mix_001",
+      "query": "그래비티 판교 체크인 시간 알려줘",
+      "hotel": "gravity_pangyo",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "체크인",
+        "15:00"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주",
+        "팰리스",
+        "레스케이프"
+      ],
+      "min_score": 0.5
+    },
+    {
+      "id": "halluc_mix_002",
+      "query": "조선 팰리스 객실 타입 안내해줘",
+      "hotel": "josun_palace",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "객실"
+      ],
+      "forbidden_keywords": [
+        "수영장",
+        "풀",
+        "피트니스",
+        "사우나",
+        "부산",
+        "제주"
+      ],
+      "min_score": 0.5
+    },
+    {
+      "id": "halluc_phone_001",
+      "query": "그랜드 조선 제주 전화번호 알려줘",
+      "hotel": "grand_josun_jeju",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "064-735-8000"
+      ],
+      "forbidden_keywords": [
+        "02-727",
+        "051-922",
+        "02-317",
+        "031-539"
+      ],
+      "min_score": 0.6
+    },
+    {
+      "id": "halluc_distance_001",
+      "query": "그래비티 판교 판교역에서 얼마나 걸려?",
+      "hotel": "gravity_pangyo",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "확인",
+        "문의"
+      ],
+      "forbidden_keywords": [
+        "도보 5분",
+        "도보 10분",
+        "도보 3분",
+        "약 5분",
+        "약 10분",
+        "약 3분"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "halluc_nonexist_001",
+      "query": "조선 팰리스 공항 리무진 예약하고 싶어요",
+      "hotel": "josun_palace",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "확인",
+        "문의"
+      ],
+      "forbidden_keywords": [
+        "예약 가능",
+        "예약하실 수 있습니다",
+        "운행"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "entity_redirect_001",
+      "query": "팔레드신 메뉴 알려줘",
+      "hotel": "grand_josun_jeju",
+      "category": "엔티티검증",
+      "expected_keywords": [
+        "부산",
+        "레스케이프",
+        "어느 호텔"
+      ],
+      "forbidden_keywords": [
+        "잇투오",
+        "그랑 제이",
+        "피크포인트"
+      ],
+      "min_score": 0.0
+    },
+    {
+      "id": "entity_clarify_001",
+      "query": "아리아 가격 알려줘",
+      "hotel": null,
+      "category": "엔티티검증",
+      "expected_keywords": [
+        "부산",
+        "제주",
+        "어느 호텔"
+      ],
+      "forbidden_keywords": [],
+      "min_score": 0.0
+    },
+    {
+      "id": "entity_proceed_001",
+      "query": "이타닉 가든 디너 메뉴 알려줘",
+      "hotel": "josun_palace",
+      "category": "엔티티검증",
+      "expected_keywords": [
+        "이타닉"
+      ],
+      "forbidden_keywords": [
+        "부산",
+        "제주",
+        "레스케이프",
+        "그래비티"
+      ],
+      "min_score": 0.7
+    },
+    {
+      "id": "halluc_person_001",
+      "query": "손종원 셰프가 운영하는 레스토랑 알려줘",
+      "hotel": "grand_josun_jeju",
+      "category": "할루시네이션",
+      "expected_keywords": [
+        "확인",
+        "문의"
+      ],
+      "forbidden_keywords": [
+        "잇투오",
+        "손종원"
+      ],
+      "min_score": 0.0
     }
   ]
 }

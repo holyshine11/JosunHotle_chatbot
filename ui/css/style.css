@@ -702,6 +702,17 @@ body {
   color: #94a3b8;
 }
 
+/* 생각중/음성준비중 아바타 글로우 */
+.chat-avatar-wrap.avatar-thinking {
+  animation: avatarThinkPulse 2s ease-in-out infinite;
+}
+
+@keyframes avatarThinkPulse {
+  0% { filter: drop-shadow(0 0 0 rgba(100, 149, 237, 0.3)); }
+  50% { filter: drop-shadow(0 0 12px rgba(100, 149, 237, 0.5)); }
+  100% { filter: drop-shadow(0 0 0 rgba(100, 149, 237, 0.3)); }
+}
+
 /* TTS 재생 시 아바타 글로우 */
 .chat-avatar-wrap.avatar-speaking {
   animation: avatarSpeakPulse 1.5s ease-in-out infinite;

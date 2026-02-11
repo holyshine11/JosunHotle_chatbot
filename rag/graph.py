@@ -9,6 +9,7 @@ LangGraph 기반 RAG 플로우
 
 import re
 import json
+import os
 from datetime import datetime
 from typing import TypedDict, Literal, Optional
 from pathlib import Path
@@ -20,13 +21,17 @@ from rag.llm_provider import callLLM
 
 # Grounding Gate import
 from rag.grounding import groundingGate, categoryChecker
+# 답변 검증 모듈
+from rag.verify import answerVerifier
 from rag.constants import (
     EVIDENCE_THRESHOLD, RERANKER_ENABLED, VALID_QUERY_KEYWORDS,
     MIN_CHUNKS_REQUIRED, LLM_MODEL, LLM_ENABLED,
     HOTEL_KEYWORDS, CATEGORY_KEYWORDS, SYNONYM_DICT,
     FORBIDDEN_KEYWORDS, AMBIGUOUS_PATTERNS, CONTEXT_CLARIFICATION,
     INVALID_QUERY_PATTERNS, MIN_QUERY_LENGTH, HOTEL_INFO,
+    SUSPICIOUS_PATTERNS,
 )
+from rag.entity import extractRestaurantEntity
 
 
 class RAGState(TypedDict):
@@ -77,6 +82,10 @@ class RAGState(TypedDict):
     # 대화 주제 추적 (컨텍스트 오염 방지)
     conversation_topic: Optional[str]  # 히스토리에서 추출한 현재 주제
     effective_category: Optional[str]  # 검색에 사용된 카테고리
+
+    # 레스토랑 엔티티 추출 결과
+    restaurant_entity: Optional[dict]      # extractRestaurantEntity() 결과
+    restaurant_redirect_msg: Optional[str]  # 리다이렉트/명확화 안내 메시지
 
     # 세션 컨텍스트 (서버 세션 참조)
     session_context: Optional[object]  # ConversationContext 객체 참조
@@ -303,6 +312,7 @@ class RAGGraph:
 
 [중요 규칙]
 - 현재 질문이 이전 대화와 완전히 다른 주제(예: 이전에 교통편→지금 객실)면 절대 이전 맥락을 섞지 마세요
+- 현재 질문에 이전 대화에 없던 새로운 고유명사(인물명, 브랜드명)가 등장하면, 이전 맥락과 무관한 새 질문으로 처리하세요
 - 이전 대화 내용을 답변에 포함하지 마세요. 질문만 재작성하세요
 - 교통편, 지하철 노선, 버스 번호 등의 구체적 정보를 질문에 추가하지 마세요
 
@@ -356,6 +366,24 @@ class RAGGraph:
         # 호텔 정보 (명확화 질문에 포함)
         hotelInfo = self.HOTEL_INFO.get(hotel, {})
         hotelName = hotelInfo.get("name", "")
+
+        # ========================================
+        # 엔티티 기반 명확화 (레스토랑이 여러 호텔에 존재)
+        # ========================================
+        entityResult = state.get("restaurant_entity")
+        if entityResult and entityResult.get("action") == "clarify":
+            clarifyMsg = state.get("restaurant_redirect_msg", "")
+            clarifyOptions = entityResult.get("clarify_options", [])
+            print(f"[엔티티 명확화] {clarifyMsg}")
+            return {
+                **state,
+                "needs_clarification": True,
+                "clarification_question": clarifyMsg,
+                "clarification_options": clarifyOptions,
+                "clarification_type": "restaurant_entity",
+                "evidence_passed": True,
+                "final_answer": clarifyMsg,
+            }
 
         # ========================================
         # Phase 16-1: 명확화 루프 방지
@@ -638,6 +666,21 @@ class RAGGraph:
                         break
             isValidQuery = hasValidKeyword
 
+        # 레스토랑 엔티티 추출 및 호텔 맥락 검증
+        entityResult = extractRestaurantEntity(query, detectedHotel)
+        restaurantRedirectMsg = None
+
+        if entityResult["action"] == "redirect":
+            # 다른 호텔 1곳에만 존재 → 호텔 자동 전환 + 안내 메시지
+            detectedHotel = entityResult["redirect_hotel"]
+            restaurantRedirectMsg = entityResult["message"]
+            print(f"[엔티티 리다이렉트] {entityResult['matched_alias']} → {detectedHotel}")
+
+        elif entityResult["action"] == "clarify":
+            # 2곳 이상 → 명확화 질문으로 전환
+            restaurantRedirectMsg = entityResult["message"]
+            print(f"[엔티티 명확화] {entityResult['matched_alias']} → 호텔 선택 필요")
+
         return {
             **state,
             "language": language,
@@ -645,6 +688,8 @@ class RAGGraph:
             "category": detectedCategory,
             "normalized_query": query,
             "is_valid_query": isValidQuery,
+            "restaurant_entity": entityResult,
+            "restaurant_redirect_msg": restaurantRedirectMsg,
         }
 
     def retrieveNode(self, state: RAGState) -> RAGState:
@@ -802,7 +847,13 @@ class RAGGraph:
         }
 
     def answerComposeNode(self, state: RAGState) -> RAGState:
-        """답변 생성 노드: LLM을 사용해 자연어 답변 생성"""
+        """답변 생성 노드: LLM을 사용해 자연어 답변 생성
+
+        개선사항:
+        - 복수 청크 교차 참조 조합 (중복 제거 + 정보 병합)
+        - URL 메타데이터에서 핵심 상세 정보 추출하여 컨텍스트에 포함
+        - 청크 간 보완 관계 분석으로 완성도 높은 답변 생성
+        """
         chunks = state["retrieved_chunks"]
         query = state["normalized_query"]
         hotel = state.get("detected_hotel")
@@ -814,25 +865,39 @@ class RAGGraph:
                 "sources": [],
             }
 
-        # 컨텍스트 구성 + 출처 수집 (상위 5개 청크, 번호/URL 포함)
+        # === Phase 1: 청크 중복 제거 및 정보 병합 ===
+        mergedChunks = self._mergeChunkInfo(chunks[:5])
+
+        # 컨텍스트 구성 + 출처 수집 (병합된 청크, 번호/URL 포함)
         contextParts = []
         sources = []
         seenUrls = set()
 
-        for i, chunk in enumerate(chunks[:5], 1):
+        for i, chunk in enumerate(mergedChunks, 1):
             hotelName = chunk["metadata"].get("hotel_name", "")
             url = chunk["metadata"].get("url", "")
             text = chunk["text"]
 
-            # 컨텍스트에 청크 번호와 URL 포함 (LLM이 출처 추적 가능)
-            contextParts.append(f"[참조{i}] [{hotelName}] (출처: {url})\n{text}")
+            # === Phase 2: URL 메타데이터에서 핵심 정보 추출 ===
+            urlDetails = self._extractUrlDetails(url, chunk)
+            urlDetailText = f"\n[URL 상세: {urlDetails}]" if urlDetails else ""
+
+            # 컨텍스트에 청크 번호와 URL + 상세정보 포함
+            contextParts.append(
+                f"[참조{i}] [{hotelName}] (출처: {url}){urlDetailText}\n{text}"
+            )
 
             # 출처 수집 (중복 제거)
             if url and url not in seenUrls:
                 sources.append({"index": i, "url": url, "hotel": hotelName})
                 seenUrls.add(url)
 
+        # === Phase 3: 교차 참조 힌트 생성 ===
+        crossRefHint = self._buildCrossRefHint(mergedChunks, query)
+
         context = "\n\n".join(contextParts)
+        if crossRefHint:
+            context += f"\n\n[교차 참조 가이드]\n{crossRefHint}"
 
         # === 맥락 충분성 사전 검증 ===
         # 질문이 구체적 정보(시설명, 시간, 가격 등)를 요구하는데
@@ -878,11 +943,261 @@ class RAGGraph:
             # 참조 번호가 없으면 모든 소스 사용 (fallback)
             usedSources = [src["url"] for src in sources]
 
+        # 레스토랑 리다이렉트 메시지가 있으면 답변 앞에 추가
+        redirectMsg = state.get("restaurant_redirect_msg")
+        if redirectMsg and answer:
+            answer = f"{redirectMsg}\n\n{answer}"
+
         return {
             **state,
             "answer": answer,
             "sources": usedSources,  # 사용된 URL만 전달
         }
+
+    def _mergeChunkInfo(self, chunks: list) -> list:
+        """복수 청크의 중복 제거 및 정보 병합
+
+        동일 URL/주제의 청크들을 병합하여 정보를 통합하고,
+        중복 문장을 제거하여 LLM에 전달하는 컨텍스트 품질을 향상.
+
+        Args:
+            chunks: 상위 N개 청크 리스트
+
+        Returns:
+            병합된 청크 리스트 (원본 구조 유지)
+        """
+        if len(chunks) <= 1:
+            return chunks
+
+        # URL 기반 그룹핑 (동일 페이지에서 온 청크 병합)
+        urlGroups = {}
+        standalone = []
+
+        for chunk in chunks:
+            url = chunk.get("metadata", {}).get("url", "")
+            if url:
+                if url not in urlGroups:
+                    urlGroups[url] = []
+                urlGroups[url].append(chunk)
+            else:
+                standalone.append(chunk)
+
+        merged = []
+        seenSentences = set()
+
+        for url, group in urlGroups.items():
+            if len(group) == 1:
+                # 단독 청크: 중복 문장만 제거
+                deduped = self._deduplicateSentences(group[0]["text"], seenSentences)
+                if deduped.strip():
+                    mergedChunk = {**group[0], "text": deduped}
+                    merged.append(mergedChunk)
+            else:
+                # 동일 URL 복수 청크: 텍스트 병합 후 중복 제거
+                combinedTexts = []
+                bestScore = 0
+                bestMetadata = group[0].get("metadata", {})
+
+                for c in group:
+                    deduped = self._deduplicateSentences(c["text"], seenSentences)
+                    if deduped.strip():
+                        combinedTexts.append(deduped)
+                    chunkScore = c.get("score", 0)
+                    if chunkScore > bestScore:
+                        bestScore = chunkScore
+                        bestMetadata = c.get("metadata", {})
+
+                if combinedTexts:
+                    mergedText = "\n".join(combinedTexts)
+                    mergedChunk = {
+                        **group[0],
+                        "text": mergedText,
+                        "metadata": bestMetadata,
+                        "score": bestScore,
+                        "_merged_count": len(group),
+                    }
+                    merged.append(mergedChunk)
+
+        # standalone 청크 추가
+        for chunk in standalone:
+            deduped = self._deduplicateSentences(chunk["text"], seenSentences)
+            if deduped.strip():
+                merged.append({**chunk, "text": deduped})
+
+        # 점수순 정렬 유지
+        merged.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # 최대 5개 반환 (병합으로 줄어든 경우 그대로)
+        return merged[:5]
+
+    def _deduplicateSentences(self, text: str, seenSentences: set) -> str:
+        """텍스트 내 중복 문장 제거 (교차 청크 중복 포함)
+
+        Args:
+            text: 원본 텍스트
+            seenSentences: 이미 등장한 문장 셋 (교차 청크 추적용, 부작용으로 업데이트)
+
+        Returns:
+            중복 제거된 텍스트
+        """
+        lines = text.split('\n')
+        uniqueLines = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                uniqueLines.append(line)
+                continue
+
+            # Q: / A: 라인은 항상 유지 (FAQ 구조 보존)
+            if stripped.startswith("Q:") or stripped.startswith("A:"):
+                uniqueLines.append(line)
+                seenSentences.add(stripped)
+                continue
+
+            # 정규화된 문장으로 중복 체크 (공백/구두점 차이 무시)
+            normalized = re.sub(r'\s+', ' ', stripped).lower()
+            if len(normalized) < 10:
+                # 짧은 라인은 중복 체크 건너뜀 (제목, 구분선 등)
+                uniqueLines.append(line)
+                continue
+
+            if normalized not in seenSentences:
+                seenSentences.add(normalized)
+                uniqueLines.append(line)
+
+        return '\n'.join(uniqueLines)
+
+    def _extractUrlDetails(self, url: str, chunk: dict) -> str:
+        """URL 메타데이터에서 핵심 상세 정보 추출
+
+        URL 경로를 분석하여 해당 페이지의 컨텍스트 힌트를 생성.
+        단순히 URL을 전달하는 대신 페이지의 성격을 LLM에 안내.
+
+        Args:
+            url: 청크의 원본 URL
+            chunk: 청크 데이터 (metadata 포함)
+
+        Returns:
+            URL 상세 정보 문자열 (빈 문자열이면 생략)
+        """
+        if not url:
+            return ""
+
+        details = []
+        urlLower = url.lower()
+        metadata = chunk.get("metadata", {})
+
+        # URL 경로에서 페이지 유형 추출
+        pageTypeMap = {
+            "/dining/": "다이닝 정보 페이지",
+            "/room/": "객실 정보 페이지",
+            "/package/": "패키지 상품 페이지",
+            "/facilities/": "부대시설 정보 페이지",
+            "/about/location": "위치/교통 안내 페이지",
+            "/event/": "이벤트/프로모션 페이지",
+            "/activity/": "액티비티 안내 페이지",
+            "/spa/": "스파/웰니스 페이지",
+            "/wedding/": "웨딩/연회 페이지",
+        }
+
+        for pathKey, pageDesc in pageTypeMap.items():
+            if pathKey in urlLower:
+                details.append(pageDesc)
+                break
+
+        # 메타데이터에서 카테고리/페이지 타입 추출
+        pageType = metadata.get("page_type", "")
+        if pageType and pageType not in ["faq", "general"]:
+            typeLabels = {
+                "dining_menu": "메뉴 상세",
+                "package": "패키지 상품",
+                "event": "이벤트",
+                "activity": "액티비티",
+                "pet_policy": "반려동물 정책",
+                "contact": "연락처",
+                "breakfast": "조식 정보",
+            }
+            label = typeLabels.get(pageType, pageType)
+            details.append(label)
+
+        # 호텔별 도메인 코드 추출 (jpg, gjb, gjj, les, grp)
+        hotelDomainMap = {
+            "jpg.josunhotel.com": "조선 팰리스",
+            "gjb.josunhotel.com": "그랜드 조선 부산",
+            "gjj.josunhotel.com": "그랜드 조선 제주",
+            "les.josunhotel.com": "레스케이프",
+            "grp.josunhotel.com": "그래비티 판교",
+        }
+        for domain, name in hotelDomainMap.items():
+            if domain in urlLower:
+                details.append(f"출처 호텔: {name}")
+                break
+
+        return ", ".join(details) if details else ""
+
+    def _buildCrossRefHint(self, chunks: list, query: str) -> str:
+        """교차 참조 힌트 생성: 복수 청크의 보완 관계를 LLM에 안내
+
+        각 청크가 어떤 정보를 담고 있는지 요약하여
+        LLM이 정보를 조합할 수 있도록 가이드 제공.
+
+        Args:
+            chunks: 병합된 청크 리스트
+            query: 정규화된 질문
+
+        Returns:
+            교차 참조 가이드 텍스트 (빈 문자열이면 생략)
+        """
+        if len(chunks) <= 1:
+            return ""
+
+        # 청크별 정보 유형 감지
+        chunkInfoTypes = []
+        for i, chunk in enumerate(chunks, 1):
+            text = chunk.get("text", "")
+            infoTypes = []
+
+            # 시간 정보
+            if re.search(r'\d{1,2}:\d{2}', text):
+                infoTypes.append("운영시간")
+
+            # 가격 정보
+            if re.search(r'[\d,]+\s*원', text):
+                infoTypes.append("가격")
+
+            # 메뉴/서비스 항목
+            if re.search(r'[-•]\s*[가-힣]', text) or text.count('\n') > 5:
+                infoTypes.append("항목목록")
+
+            # 위치/교통
+            if re.search(r'(역|정류장|출구|도보|차량|층)', text):
+                infoTypes.append("위치/접근")
+
+            # 정책/규정
+            if re.search(r'(가능|불가|금지|허용|필수|제한)', text):
+                infoTypes.append("정책/규정")
+
+            # 패키지/이벤트
+            metadata = chunk.get("metadata", {})
+            pageType = metadata.get("page_type", "")
+            if pageType in ["package", "event", "activity"]:
+                infoTypes.append(f"{pageType}상세")
+
+            # FAQ 형태
+            if "Q:" in text and "A:" in text:
+                infoTypes.append("FAQ")
+
+            if infoTypes:
+                chunkInfoTypes.append(f"참조{i}: {', '.join(infoTypes)}")
+
+        if not chunkInfoTypes:
+            return ""
+
+        hint = "아래 참조들은 서로 보완적인 정보를 포함합니다. 관련 정보를 조합하여 완성도 높은 답변을 작성하세요:\n"
+        hint += "\n".join(f"- {info}" for info in chunkInfoTypes)
+
+        return hint
 
     def _checkContextSufficiency(self, query: str, chunks: list, hotel: str = None) -> Optional[str]:
         """맥락 충분성 검증: 질문이 구체적 정보를 요구하는데 청크가 일반론만 제공하는지 확인
@@ -966,6 +1281,8 @@ class RAGGraph:
 2. 정보가 없으면: "정확한 정보 확인을 위해 {contactInfo}로 문의 부탁드립니다"
 3. 가격, 시간, 전화번호는 정확히 인용
 4. 추측 금지 ("약", "대략", "아마" 사용 금지)
+5. 여러 참조에 흩어진 관련 정보를 교차 참조하여 통합된 답변 작성
+6. URL에 담긴 상세 정보(메뉴, 가격, 운영시간 등)가 있으면 핵심 내용을 답변에 포함
 
 [고유명사/시설명 규칙 - 최우선]
 - 컨텍스트에 있는 정보는 적극 활용하여 답변하세요
@@ -1003,6 +1320,7 @@ class RAGGraph:
 - 단어/숫자만 던지는 불친절한 답변 금지
 - 컨텍스트에 없는 시설명/레스토랑명/브랜드명 창작 금지
 - 컨텍스트에 없는 운영시간/가격 창작 금지
+- 참고 정보에 없는 인물명(셰프, 대표, 오너 등) 언급 금지
 - 지하철 노선(N호선), 버스 번호, 교통 경로 정보를 절대 창작하지 마세요
 - 교통편(택시 요금, 소요 시간, 환승 경로) 정보는 반드시 컨텍스트에 있는 내용만 답변하세요
 - 출발지별 경로 정보가 컨텍스트에 없으면 "정확한 교통 정보를 찾을 수 없습니다"라고 답변하세요
@@ -1021,7 +1339,9 @@ class RAGGraph:
 4. 특히 시설명, 레스토랑명, 프로그램명은 참고 정보에 명시된 것만 사용하세요
 5. 참고 정보에 구체적 답변이 없으면: "해당 정보를 찾을 수 없습니다"라고 솔직히 답변하세요
 6. "궁금하신가요?" 같은 추가 질문은 절대 하지 마세요
-7. 답변 마지막에 반드시 사용한 참조 번호를 표시하세요. 형식: [REF:1,3] (쉼표로 구분)
+7. 여러 참조에 관련 정보가 분산되어 있으면 교차 참조하여 하나의 통합된 답변으로 조합하세요
+8. URL 상세 정보(메뉴, 가격, 시간 등)가 있으면 단순 URL 안내 대신 핵심 내용을 답변에 포함하세요
+9. 답변 마지막에 반드시 사용한 참조 번호를 표시하세요. 형식: [REF:1,3] (쉼표로 구분)
 
 [답변 형식 예시]
 조식은 오전 7시부터 10시까지 운영됩니다. [REF:2]
@@ -1279,476 +1599,6 @@ class RAGGraph:
         merged.sort(key=lambda x: x.get("score", 0), reverse=True)
         return merged[:topK]
 
-    def _extractQueryKeywords(self, query: str) -> list[str]:
-        """질문에서 핵심 키워드 추출"""
-        # 반려동물/펫 관련 키워드
-        petKeywords = ["강아지", "반려견", "pet", "펫", "반려동물", "애견", "고양이", "댕댕이"]
-        # 주차 관련 키워드
-        parkingKeywords = ["주차", "parking", "발렛", "valet", "파킹"]
-        # 수영장 관련 키워드
-        poolKeywords = ["수영장", "pool", "풀", "swimming"]
-        # 조식 관련 키워드
-        breakfastKeywords = ["조식", "breakfast", "아침", "뷔페", "아침식사"]
-
-        queryLower = query.lower()
-        foundKeywords = []
-
-        # 카테고리별 키워드 검사
-        if any(kw in queryLower for kw in petKeywords):
-            foundKeywords.append("반려동물")
-        if any(kw in queryLower for kw in parkingKeywords):
-            foundKeywords.append("주차")
-        if any(kw in queryLower for kw in poolKeywords):
-            foundKeywords.append("수영장")
-        if any(kw in queryLower for kw in breakfastKeywords):
-            foundKeywords.append("조식")
-
-        return foundKeywords
-
-    def _checkQueryContextRelevance(self, query: str, chunks: list) -> tuple[bool, str]:
-        """질문 핵심 키워드가 검색된 청크에 있는지 검증
-
-        Phase 16: 검증 범위 확대 + 관대한 매칭
-        - top 5 청크까지 검색 (기존 top 3)
-        - 카테고리 매칭 유연화
-        - 패키지 카테고리 포함
-        """
-        queryKeywords = self._extractQueryKeywords(query)
-
-        if not queryKeywords:
-            # 핵심 키워드가 없으면 검증 통과 (일반 질문)
-            return True, ""
-
-        # 청크 텍스트 결합 (top 5로 확대)
-        chunkTexts = " ".join([c.get("text", "") for c in chunks[:5]])
-        chunkTextsLower = chunkTexts.lower()
-
-        # 카테고리 메타데이터도 확인 (top 5)
-        chunkCategories = [c.get("metadata", {}).get("category", "").lower() for c in chunks[:5]]
-        # page_type도 확인
-        chunkPageTypes = [c.get("metadata", {}).get("page_type", "").lower() for c in chunks[:5]]
-
-        # 카테고리별 확장 키워드 (검색 범위 확대)
-        categoryKeywordMap = {
-            "반려동물": ["반려", "pet", "펫", "강아지", "dog", "애견", "소형견", "반려견", "동물", "salon", "패키지", "불가", "동반"],
-            "주차": ["주차", "parking", "발렛", "valet", "파킹", "차량", "주차장"],
-            "수영장": ["수영", "pool", "풀", "swimming", "인피니티", "워터"],
-            "조식": ["조식", "breakfast", "아침", "뷔페", "dining", "식사", "레스토랑"],
-        }
-
-        # 동의어 포함하여 매칭 검사
-        for keyword in queryKeywords:
-            keywordFound = False
-
-            # 카테고리 메타데이터에서 직접 매칭
-            for cat in chunkCategories:
-                if keyword.replace("동물", "") in cat or keyword in cat:
-                    keywordFound = True
-                    break
-
-            # page_type에서 매칭 (패키지 등)
-            if not keywordFound:
-                for pt in chunkPageTypes:
-                    if keyword in pt or "package" in pt:
-                        keywordFound = True
-                        break
-
-            # 텍스트에서 확장 키워드 매칭
-            if not keywordFound:
-                expandedKeywords = categoryKeywordMap.get(keyword, [keyword])
-                for kw in expandedKeywords:
-                    if kw.lower() in chunkTextsLower:
-                        keywordFound = True
-                        break
-
-            if not keywordFound:
-                print(f"[관련성 검증] '{keyword}' 관련 정보 미발견 — 하지만 검색 결과가 있으므로 진행")
-                # 검색 결과가 존재하면 차단하지 않고 경고만 (Phase 16)
-                # 이전: 즉시 차단 → 변경: 로그만 남기고 통과
-                # return False, f"질문의 '{keyword}' 관련 정보가 검색 결과에 없습니다."
-
-        return True, ""
-
-    def _extractNumbers(self, text: str) -> set[str]:
-        """텍스트에서 숫자 정보 추출 (가격, 시간, 전화번호)"""
-        numbers = set()
-
-        # 가격 패턴: 1,000원, 50000원, 1,234,567원
-        prices = re.findall(r'[\d,]+\s*원', text)
-        numbers.update(prices)
-
-        # 시간 패턴: 15:00, 06:30, 오후 3시
-        times = re.findall(r'\d{1,2}:\d{2}', text)
-        numbers.update(times)
-
-        # 전화번호 패턴: 02-727-7200, 051-922-5000
-        phones = re.findall(r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', text)
-        numbers.update(phones)
-
-        # 퍼센트: 20%, 30%
-        percents = re.findall(r'\d+\s*%', text)
-        numbers.update(percents)
-
-        # 층수: 26층, 36층
-        floors = re.findall(r'\d+\s*층', text)
-        numbers.update(floors)
-
-        # 인원: 2인, 4인
-        persons = re.findall(r'\d+\s*인', text)
-        numbers.update(persons)
-
-        return numbers
-
-    def _checkResponseQuality(self, answer: str, query: str) -> tuple[bool, list[str]]:
-        """응답 품질 검사 (Phase 1): 비정상 문자, 언어 혼합 탐지"""
-        issues = []
-
-        # 1. 비정상 문자 탐지 (중국어 한자)
-        chineseChars = re.findall(r'[\u4e00-\u9fff]', answer)
-        if len(chineseChars) > 2:  # 2글자 이상 중국어
-            issues.append(f"비정상: 중국어 문자 포함 ({len(chineseChars)}자)")
-
-        # 2. 일본어 문자 탐지 (히라가나/가타카나)
-        japaneseChars = re.findall(r'[\u3040-\u30ff]', answer)
-        if len(japaneseChars) > 2:
-            issues.append(f"비정상: 일본어 문자 포함 ({len(japaneseChars)}자)")
-
-        # 3. 한글 비율 검사 (개선: 시간/숫자/영문 브랜드명 제외 후 계산)
-        # 정상적인 호텔 정보에 포함되는 패턴 제거
-        normalizedAnswer = answer
-
-        # 시간 패턴 제거 (06:30, 10:00 - 18:00, BREAK TIME 등)
-        normalizedAnswer = re.sub(r'\d{1,2}:\d{2}\s*[-~]\s*\d{1,2}:\d{2}', '', normalizedAnswer)
-        normalizedAnswer = re.sub(r'\d{1,2}:\d{2}', '', normalizedAnswer)
-        normalizedAnswer = re.sub(r'BREAK\s*TIME', '', normalizedAnswer, flags=re.IGNORECASE)
-
-        # 호텔 관련 영문 브랜드/용어 제거
-        hotelTerms = [
-            'KIDS', 'Superior', 'Deluxe', 'Suite', 'Premier', 'Standard',
-            'Twin', 'Double', 'King', 'Queen', 'Pool', 'Spa', 'Fitness',
-            'Andish', 'Zerovity', 'Aria', 'Constans', 'Eat2O',
-            'VAT', 'URL', 'http', 'https', 'do', 'josunhotel', 'com',
-        ]
-        for term in hotelTerms:
-            normalizedAnswer = re.sub(rf'\b{term}\b', '', normalizedAnswer, flags=re.IGNORECASE)
-
-        # 숫자, URL, 특수문자 제거
-        normalizedAnswer = re.sub(r'[\d\-:~/.,@#$%^&*()_+=\[\]{}|\\<>]', '', normalizedAnswer)
-
-        koreanChars = len(re.findall(r'[가-힣]', normalizedAnswer))
-        totalChars = len(normalizedAnswer.replace(' ', '').replace('\n', ''))
-
-        # 정규화 후 최소 문자가 남아있을 때만 비율 체크
-        if totalChars > 5 and koreanChars / totalChars < 0.25:
-            issues.append(f"비정상: 한글 비율 낮음 ({koreanChars}/{totalChars})")
-
-        # 4. 의미 없는 패턴 탐지
-        meaninglessPatterns = [
-            (r'宫咚咚', "중국어 의미없는 패턴"),
-            (r'参考资料', "중국어 안내 문구"),
-            (r'无法提供', "중국어 안내 문구"),
-            (r'\?\?+', "반복 물음표"),
-            (r'！！+', "반복 느낌표"),
-            (r'\.\.\.\.+', "과도한 말줄임"),
-        ]
-        for pattern, desc in meaninglessPatterns:
-            if re.search(pattern, answer):
-                issues.append(f"비정상: {desc}")
-                break
-
-        # 5. 답변이 너무 짧거나 비어있음
-        cleanAnswer = answer.strip()
-        if len(cleanAnswer) < 5:
-            issues.append("비정상: 답변이 너무 짧음")
-
-        # 6. 금지 패턴 강제 필터링 (LLM이 무시해도 잡아냄)
-        forbiddenPatterns = [
-            (r'궁금하신가요', "금지 문구"),
-            (r'더\s*필요하신\s*것', "금지 문구"),
-            (r'어떤\s*것이?\s*궁금', "금지 문구"),
-            (r'도움이?\s*되셨', "금지 문구"),
-            (r'추가.*질문', "금지 문구"),
-            (r'알려주시면', "금지 문구"),
-            (r'말씀해\s*주시', "금지 문구"),
-            (r'문의.*주시면', "금지 문구"),
-            (r'^\s*-\s*-\s*$', "빈 내용"),  # "- -" 같은 의미없는 패턴
-            (r'정보가\s*없습니다.*문의', "잘못된 안내"),  # 정보 없다면서 문의 유도
-        ]
-        for pattern, desc in forbiddenPatterns:
-            if re.search(pattern, answer, re.IGNORECASE | re.MULTILINE):
-                issues.append(f"금지패턴: {desc}")
-
-        return len(issues) == 0, issues
-
-    def _extractDirectAnswer(self, topText: str, query: str) -> str:
-        """chunk에서 직접 답변 추출 (Fallback용)"""
-        directAnswer = None
-
-        # 1. Q&A 형식에서 A: 부분 추출
-        if "A:" in topText:
-            aMatch = re.search(r'A:\s*(.+?)(?:\n\n|$)', topText, re.DOTALL)
-            if aMatch:
-                directAnswer = aMatch.group(1).strip()
-
-        # 2. 구조화된 정보 추출 (이름, 설명, 시간, 위치, 문의처)
-        if not directAnswer:
-            parts = []
-
-            # 시설명/레스토랑명 추출
-            facilityName = ""
-            # "호텔명 레스토랑: 이름" 패턴
-            headerMatch = re.search(r'레스토랑[:\s]+([가-힣a-zA-Z\'\s]+)', topText)
-            if headerMatch:
-                facilityName = headerMatch.group(1).strip()
-            if not facilityName:
-                headerMatch = re.search(r'([가-힣]+(?:\s+[가-힣]+)*)\s*(?:안내|상세)', topText)
-                if headerMatch:
-                    facilityName = headerMatch.group(1).strip()
-
-            if facilityName:
-                parts.append(facilityName)
-
-            # 설명 추출
-            descMatch = re.search(r'(?:BUFFET|뷔페|시푸드|Seafood|그릴|Grill)[^\n]*', topText, re.IGNORECASE)
-            if descMatch:
-                parts.append(descMatch.group(0).strip().rstrip('.'))
-
-            # 운영시간
-            timeMatch = re.search(
-                r'(?:HOURS?\s*(?:OF\s*)?OPERATION|운영\s*시간)\s*[:：]?\s*(\d{1,2}:\d{2}\s*[-~]\s*\d{1,2}:\d{2})',
-                topText, re.IGNORECASE
-            )
-            if timeMatch:
-                hours = timeMatch.group(1).strip()
-                parts.append(f"운영시간: {hours}")
-
-            # 위치
-            locationMatch = re.search(
-                r'(?:LOCATION|위치)\s*[:：]?\s*(.+?)(?:\n|PERIOD|HOURS|INQUIRY|$)',
-                topText, re.IGNORECASE
-            )
-            if locationMatch:
-                loc = locationMatch.group(1).strip().rstrip('-').strip()
-                if loc:
-                    parts.append(f"위치: {loc}")
-
-            # 문의처
-            inquiryMatch = re.search(r'(?:INQUIRY|문의/?예약|문의)\s*[:：]?\s*([\d\.\-\s,]+)', topText, re.IGNORECASE)
-            if inquiryMatch:
-                phone = inquiryMatch.group(1).strip()
-                parts.append(f"문의: {phone}")
-
-            if len(parts) >= 2:  # 최소 2개 항목이 있어야 유의미한 답변
-                directAnswer = "\n".join([f"- {p}" for p in parts])
-
-        return directAnswer
-
-    def _checkTransportationHallucination(self, answer: str, context: str, query: str) -> tuple[bool, list[str], str]:
-        """교통편/노선 정보 날조 검사: 컨텍스트에 없는 교통 경로 정보 탐지
-
-        Returns:
-            (통과 여부, 이슈 목록, 정제된 답변)
-        """
-        issues = []
-        cleanedAnswer = answer
-
-        # 교통 날조 패턴: 컨텍스트에 없는 구체적 노선/경로 정보
-        transportPatterns = [
-            (r'\d+호선', "지하철 노선"),
-            (r'지하철\s*[가-힣]+선', "지하철 노선명"),
-            (r'버스\s*\d+번?', "버스 노선"),
-            (r'[가-힣]+역에서\s*[가-힣]+역', "지하철 경로"),
-            (r'환승|갈아타', "환승 안내"),
-        ]
-
-        for pattern, desc in transportPatterns:
-            matches = re.findall(pattern, answer)
-            for match in matches:
-                # 컨텍스트에 해당 정보가 있는지 확인
-                if match not in context:
-                    issues.append(f"교통편 날조: '{match}' ({desc}) — 컨텍스트에 없음")
-
-        # 교통 날조 문장 제거
-        if issues:
-            sentences = re.split(r'(?<=[.!?다요])\s+', cleanedAnswer)
-            filteredSentences = []
-            for sentence in sentences:
-                hasTransportFabrication = False
-                for pattern, _ in transportPatterns:
-                    matches = re.findall(pattern, sentence)
-                    for match in matches:
-                        if match not in context:
-                            hasTransportFabrication = True
-                            break
-                    if hasTransportFabrication:
-                        break
-                if not hasTransportFabrication:
-                    filteredSentences.append(sentence)
-
-            cleanedAnswer = " ".join(filteredSentences).strip()
-            print(f"[교통편 날조 검증] 감지: {issues}")
-
-        # 주제 이탈 검사: 질문 주제와 무관한 교통편 내용이 답변에 포함되었는지
-        queryLower = query.lower()
-        transportKeywords = ["지하철", "버스", "택시", "노선", "호선", "교통편", "환승"]
-        queryIsTransport = any(kw in queryLower for kw in ["교통", "오시는", "셔틀", "공항에서", "어떻게 가"])
-
-        if not queryIsTransport:
-            # 질문이 교통편이 아닌데 답변에 교통 정보가 있으면 제거
-            for kw in transportKeywords:
-                if kw in answer and kw not in context:
-                    issues.append(f"주제 이탈: 질문 '{query[:20]}...'에 교통 정보 혼입")
-                    # 교통 관련 문장 제거
-                    sentences = re.split(r'(?<=[.!?다요])\s+', cleanedAnswer)
-                    cleanedAnswer = " ".join(
-                        s for s in sentences
-                        if not any(tk in s for tk in transportKeywords)
-                    ).strip()
-                    break
-
-        passed = len(issues) == 0
-        return passed, issues, cleanedAnswer
-
-    def _checkHallucination(self, answer: str, context: str) -> tuple[bool, list[str]]:
-        """할루시네이션 검사: 답변의 숫자가 컨텍스트에 있는지 확인"""
-        issues = []
-
-        # 답변과 컨텍스트에서 숫자 추출
-        answerNumbers = self._extractNumbers(answer)
-        contextNumbers = self._extractNumbers(context)
-
-        # 의심 패턴 검사
-        suspiciousPatterns = [
-            (r'약\s*[\d,]+\s*원', "추정 가격"),
-            (r'대략\s*[\d,]+\s*원', "추정 가격"),
-            (r'보통\s*[\d,]+\s*원', "추정 가격"),
-            (r'평균\s*[\d,]+\s*원', "추정 가격"),
-            (r'예상\s*[\d,]+', "추정 숫자"),
-            (r'아마\s*\d+', "추측"),
-        ]
-
-        for pattern, issueType in suspiciousPatterns:
-            if re.search(pattern, answer):
-                issues.append(f"의심: {issueType} 발견")
-
-        # 답변에만 있고 컨텍스트에 없는 숫자 검사
-        for num in answerNumbers:
-            # 정규화 (공백, 쉼표 제거)
-            numNorm = re.sub(r'[\s,]', '', num)
-
-            # 컨텍스트에서 찾기
-            found = False
-            for ctxNum in contextNumbers:
-                ctxNorm = re.sub(r'[\s,]', '', ctxNum)
-                if numNorm in ctxNorm or ctxNorm in numNorm:
-                    found = True
-                    break
-
-            # 일반적인 숫자는 제외 (1, 2, 3 등)
-            if not found and len(numNorm) > 2:
-                # 컨텍스트 원문에서도 검색
-                if numNorm not in context.replace(',', '').replace(' ', ''):
-                    issues.append(f"검증실패: '{num}' - 컨텍스트에 없음")
-
-        return len(issues) == 0, issues
-
-    def _checkProperNounHallucination(self, answer: str, context: str) -> tuple[bool, list[str], str]:
-        """고유명사 할루시네이션 검사: 답변의 시설명/레스토랑명이 컨텍스트에 있는지 확인
-
-        Returns:
-            (통과 여부, 이슈 목록, 정제된 답변)
-        """
-        issues = []
-        cleanedAnswer = answer
-
-        # 1. 한글+영문 병기 패턴: "그랜드 셰프 (Grand Chef)" 같은 패턴 추출
-        bilingualPattern = re.findall(
-            r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)',
-            answer
-        )
-
-        # 2. 따옴표/작은따옴표로 감싼 이름: '아리아', "Aria" 등
-        quotedNames = re.findall(r"['\"]([가-힣A-Za-z][가-힣A-Za-z\s&\'-]+)['\"]", answer)
-
-        # 3. 시설명 패턴: "~ 레스토랑", "~ 라운지", "~ 풀", "~ 센터" 등
-        facilityPattern = re.findall(
-            r'([가-힣A-Za-z]{2,}(?:\s+[가-힣A-Za-z]+)*)\s*(?:레스토랑|식당|라운지|풀|센터|카페|바|클럽|스파|사우나)',
-            answer
-        )
-
-        # 검증할 고유명사 수집
-        properNouns = set()
-
-        # 일반 한국어 단어 (고유명사 아님 — 오탐 방지)
-        commonWords = {
-            "하지만", "그리고", "또한", "그래서", "따라서", "다만", "그러나", "그런데",
-            "그렇게", "이렇게", "그곳에", "이곳에", "해당", "물론", "참고로", "특히",
-            "다양한", "일반적", "기본적", "대표적", "실내외", "실내", "실외",
-            "해운대", "강남", "판교", "명동", "제주", "부산", "서울", "인천",
-            "투숙객", "고객님", "이용객", "방문객",
-        }
-
-        for koName, enName in bilingualPattern:
-            properNouns.add(koName.strip())
-            properNouns.add(enName.strip())
-        for name in quotedNames:
-            if len(name) >= 2:
-                properNouns.add(name.strip())
-        for name in facilityPattern:
-            if len(name) >= 2 and name.strip() not in commonWords:
-                properNouns.add(name.strip())
-
-        # 호텔 브랜드명 등 일반 명칭은 제외 (검증 불필요)
-        knownNames = {
-            # 호텔 브랜드
-            "조선", "그랜드 조선", "그랜드조선", "조선 팰리스", "조선팰리스",
-            "레스케이프", "그래비티", "조선호텔", "조선델리", "조선 델리",
-            # 레스토랑/다이닝
-            "아리아", "Aria", "콘스탄스", "Constans", "홍연",
-            "팔레", "팔레드 신", "Palais", "Palais de Chine",
-            "이타닉 가든", "Eatanic Garden",
-            "앤디쉬", "Andish", "제로비티", "Zerovity",
-            "부스트", "Voost", "잇투오", "Eat2O",
-            "그랑 제이", "Gran J", "라운지바", "Lounge Bar",
-            "라망 시크레", "La Maison",
-            "테라스 292", "Terrace 292",
-            # 부대시설
-            "조선 주니어", "Josun Junior", "JOSUN JUNIOR",
-            "헤븐리", "Heavenly", "인피니티", "Infinity",
-            "서비스 원", "SERVICE ONE", "Service One",
-            "그래비티 클럽", "GRAVITY CLUB",
-        }
-
-        contextLower = context.lower()
-
-        for noun in properNouns:
-            nounLower = noun.lower()
-
-            # 일반 명칭이면 건너뜀
-            if any(known.lower() == nounLower or known.lower() in nounLower for known in knownNames):
-                continue
-
-            # 너무 짧은 이름은 건너뜀 (2글자 이하)
-            if len(noun) <= 2:
-                continue
-
-            # 컨텍스트에서 고유명사 검색
-            if nounLower not in contextLower:
-                issues.append(f"고유명사 미검증: '{noun}' — 컨텍스트에 없음")
-
-                # 해당 고유명사가 포함된 문장 제거
-                sentences = re.split(r'(?<=[.!?\n])\s*', cleanedAnswer)
-                filteredSentences = []
-                for sentence in sentences:
-                    if noun in sentence or nounLower in sentence.lower():
-                        issues.append(f"할루시네이션 문장 제거: '{sentence[:60]}...'")
-                    else:
-                        filteredSentences.append(sentence)
-                cleanedAnswer = " ".join(filteredSentences).strip()
-
-        passed = len(issues) == 0
-        return passed, issues, cleanedAnswer
-
     def answerVerifyNode(self, state: RAGState) -> RAGState:
         """답변 검증 노드: Grounding Gate 기반 문장 단위 근거 검증 + 할루시네이션 탐지"""
         answer = state.get("answer", "")
@@ -1765,7 +1615,7 @@ class RAGGraph:
         allIssues = []
 
         # Phase 0: 쿼리-컨텍스트 관련성 검증 (최우선)
-        relevancePassed, relevanceReason = self._checkQueryContextRelevance(query, chunks)
+        relevancePassed, relevanceReason = answerVerifier.checkQueryContextRelevance(query, chunks)
         if not relevancePassed:
             allIssues.append(f"관련성 부족: {relevanceReason}")
             return {
@@ -1778,7 +1628,7 @@ class RAGGraph:
             }
 
         # Phase 1: 응답 품질 검사 (비정상 문자, 언어 혼합)
-        qualityPassed, qualityIssues = self._checkResponseQuality(answer, query)
+        qualityPassed, qualityIssues = answerVerifier.checkResponseQuality(answer, query)
         allIssues.extend(qualityIssues)
 
         onlyForbiddenIssues = all("금지패턴" in i for i in qualityIssues) if qualityIssues else True
@@ -1831,22 +1681,37 @@ class RAGGraph:
         # ========================================
         # Phase 3: 기존 할루시네이션 검사
         # ========================================
-        hallucinationPassed, hallucinationIssues = self._checkHallucination(answer, context)
+        hallucinationPassed, hallucinationIssues = answerVerifier.checkHallucination(answer, context)
         allIssues.extend(hallucinationIssues)
 
         # ========================================
         # Phase 3.3: 고유명사 할루시네이션 검사 (시설명/레스토랑명 교차검증)
         # ========================================
-        properNounPassed, properNounIssues, properNounCleaned = self._checkProperNounHallucination(answer, context)
+        properNounPassed, properNounIssues, properNounCleaned = answerVerifier.checkProperNounHallucination(answer, context)
         allIssues.extend(properNounIssues)
         if not properNounPassed:
             answer = properNounCleaned  # 검증 실패 문장 제거된 답변 사용
             print(f"[고유명사 검증] 할루시네이션 감지: {properNounIssues}")
 
         # ========================================
+        # Phase 3.35: 쿼리 내 인물명 검증 (데이터에 없는 인물 질문 차단)
+        # ========================================
+        queryPersonRejected = False
+        queryPersonPattern = re.compile(r'([가-힣]{2,4})\s*(셰프|쉐프|대표|오너|총괄|매니저|소믈리에)')
+        queryPersonMatch = queryPersonPattern.search(query)
+        if queryPersonMatch:
+            personName = queryPersonMatch.group(1)
+            contextLower = context.lower()
+            if personName.lower() not in contextLower:
+                properNounPassed = False
+                queryPersonRejected = True
+                allIssues.append(f"쿼리 인물명 미검증: '{queryPersonMatch.group(0)}' — 컨텍스트에 없음")
+                print(f"[인물명 검증] 쿼리 내 '{queryPersonMatch.group(0)}' 컨텍스트 미검증 → 거부")
+
+        # ========================================
         # Phase 3.4: 교통편/노선 날조 검사
         # ========================================
-        transportPassed, transportIssues, transportCleaned = self._checkTransportationHallucination(answer, context, query)
+        transportPassed, transportIssues, transportCleaned = answerVerifier.checkTransportationHallucination(answer, context, query)
         allIssues.extend(transportIssues)
         if not transportPassed:
             answer = transportCleaned if len(transportCleaned) >= 10 else answer
@@ -1867,30 +1732,8 @@ class RAGGraph:
         # 검증 결과 종합 (Grounding 결과 포함)
         passed = qualityPassed and hallucinationPassed and groundingResult.passed and properNounPassed and transportPassed
 
-        # 금지 패턴 제거
-        forbiddenPhrases = [
-            r'궁금하신가요\??',
-            r'더\s*필요하신\s*것이?\s*있으신가요\??',
-            r'어떤\s*것이?\s*궁금하신가요\??',
-            r'도움이?\s*되셨[기나]?를?.*바랍니다\.?',
-            r'도움이?\s*되셨나요\??',
-            r'알려주시면.*답변.*드리겠습니다\.?',
-            r'다른\s*궁금한\s*사항이?\s*있으시면.*',
-            r'이에\s*대한\s*추가\s*문의사항이?\s*있으시다면.*',
-            r'더\s*필요한\s*정보가?\s*있으신가요\??',
-            r'더\s*궁금하신\s*사항이?\s*있으신가요\??',
-            r'이\s*정보로\s*도움이?.*',  # "이 정보로 도움이..." 전체 제거
-            r'이용에\s*불편을\s*드려\s*죄송합니다\.?',
-            r'이\s*정보로\s*$',  # 문장 끝에 남은 "이 정보로" 제거
-            r'해당\s*정보를?\s*찾을\s*수\s*없습니다\.?.*?(?:문의\s*부탁드립니다\.?)?',  # LLM이 섞어넣는 거부 문구
-            r'정확한\s*정보\s*확인을?\s*위해.*?문의\s*부탁드립니다\.?',  # 잘못된 거부 문구
-        ]
-        cleanedAnswer = answer
-        for phrase in forbiddenPhrases:
-            cleanedAnswer = re.sub(phrase, '', cleanedAnswer, flags=re.IGNORECASE)
-
-        # 빈 줄 정리
-        cleanedAnswer = re.sub(r'\n{3,}', '\n\n', cleanedAnswer).strip()
+        # 금지 패턴 제거 (data/config/forbidden_patterns.json에서 로딩)
+        cleanedAnswer = answerVerifier.removeForbiddenPhrases(answer)
 
         # 금지 패턴 제거 후 남은 내용이 유효한지 확인
         # (실제 정보가 포함되어 있으면 통과)
@@ -1935,6 +1778,9 @@ class RAGGraph:
             verifiedAnswer = f"정확한 정보 확인을 위해 {contactGuide}로 문의 부탁드립니다."
         elif not passed and len(verifiedAnswer) < 10:
             verifiedAnswer = f"정확한 정보 확인을 위해 {contactGuide}로 문의 부탁드립니다."
+        # 할루시네이션 감지 후 잔여 답변이 짧고 모호한 경우 거부 처리
+        elif not passed and (not properNounPassed or not transportPassed) and len(verifiedAnswer) < 80:
+            verifiedAnswer = f"해당 정보를 확인하기 어렵습니다. {contactGuide}로 문의 부탁드립니다."
 
         # ========================================
         # Phase 4.1: Fallback 답변 개선 — top chunk 직접 추출
@@ -1946,24 +1792,55 @@ class RAGGraph:
             len(verifiedAnswer) < 100
             and any(p in verifiedAnswer for p in refusalPatterns)
         )
-        if isFallback and chunks and state.get("evidence_passed"):
-            # 상위 3개 chunk에서 추출 시도
-            directAnswer = None
-            bestUrl = ""
-            for chunk in chunks[:3]:
-                chunkText = chunk.get("text", "")
-                chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
-                extracted = self._extractDirectAnswer(chunkText, query)
-                if extracted and len(extracted) >= 10:
-                    directAnswer = extracted
-                    bestUrl = chunkUrl
-                    break
+        # 교통편 날조 또는 쿼리 인물명 미검증으로 거부된 경우 Fallback 차단
+        # (LLM 답변 내 고유명사 오류는 Fallback과 무관: 청크에서 직접 추출하므로 안전)
+        hallucinationRejected = not transportPassed or queryPersonRejected
 
-            if directAnswer:
-                if bestUrl:
-                    directAnswer += f"\n\n참고 정보: {bestUrl}"
-                print(f"[Fallback 직접 추출] 거부 → chunk에서 답변 추출: {directAnswer[:80]}...")
-                verifiedAnswer = directAnswer
+        # Phase 4.1a: 연락처/전화번호 질문 시 HOTEL_INFO 단축 경로
+        phoneKeywords = ["전화", "연락처", "대표번호", "전화번호", "번호"]
+        isPhoneQuery = any(kw in query for kw in phoneKeywords)
+        if isFallback and isPhoneQuery and hotel and hotelPhone:
+            verifiedAnswer = f"{hotelName}의 대표 전화번호는 {hotelPhone}입니다."
+            locationUrl = hotelInfo.get("locationUrl", "")
+            if locationUrl:
+                verifiedAnswer += f"\n\n참고 정보: {locationUrl}"
+            print(f"[Fallback 연락처] HOTEL_INFO 단축 경로: {hotelName} {hotelPhone}")
+            isFallback = False  # 단축 경로 사용 시 추가 Fallback 불필요
+
+        if isFallback and chunks and state.get("evidence_passed") and not hallucinationRejected:
+            # Phase 4.1b: chunk에서 전화번호 패턴 우선 추출
+            phonePatternMatch = None
+            if isPhoneQuery:
+                for chunk in chunks[:5]:
+                    chunkText = chunk.get("text", "")
+                    phoneMatch = re.search(r'(\d{2,4}[-.]?\d{3,4}[-.]?\d{4})', chunkText)
+                    if phoneMatch:
+                        phonePatternMatch = phoneMatch.group(1)
+                        chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
+                        verifiedAnswer = f"{hotelName}의 대표 전화번호는 {phonePatternMatch}입니다."
+                        if chunkUrl:
+                            verifiedAnswer += f"\n\n참고 정보: {chunkUrl}"
+                        print(f"[Fallback 전화번호] chunk에서 전화번호 추출: {phonePatternMatch}")
+                        break
+
+            # Phase 4.1c: 일반 chunk 직접 추출
+            if not phonePatternMatch:
+                directAnswer = None
+                bestUrl = ""
+                for chunk in chunks[:3]:
+                    chunkText = chunk.get("text", "")
+                    chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
+                    extracted = answerVerifier.extractDirectAnswer(chunkText, query)
+                    if extracted and len(extracted) >= 10:
+                        directAnswer = extracted
+                        bestUrl = chunkUrl
+                        break
+
+                if directAnswer:
+                    if bestUrl:
+                        directAnswer += f"\n\n참고 정보: {bestUrl}"
+                    print(f"[Fallback 직접 추출] 거부 → chunk에서 답변 추출: {directAnswer[:80]}...")
+                    verifiedAnswer = directAnswer
 
         # 금지 패턴만 있던 경우 통과 처리
         onlyForbiddenPatternIssues = all(

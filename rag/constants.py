@@ -4,7 +4,27 @@ RAGGraph에서 사용하는 키워드, 매핑, 임계값 등 모든 상수를 �
 """
 
 # 근거 검증 임계값 (높을수록 엄격)
-EVIDENCE_THRESHOLD = 0.65  # 최소 유사도 점수 (질문 유효성 검사로 보완)
+EVIDENCE_THRESHOLD = 0.65  # evidenceGateNode: 검색 결과 최소 품질
+GROUNDING_THRESHOLD = 0.45  # GroundingGate: 문장 단위 근거 검증 (나열형 답변 허용)
+
+# 추정/추측 표현 패턴 (할루시네이션 감지용)
+SUSPICIOUS_PATTERNS = [
+    # 가격 추정
+    (r'약\s*[\d,]+\s*원', "추정 가격"),
+    (r'대략\s*[\d,]+\s*원', "추정 가격"),
+    (r'보통\s*[\d,]+\s*원', "추정 가격"),
+    (r'평균\s*[\d,]+\s*원', "추정 가격"),
+    (r'예상\s*[\d,]+', "추정 숫자"),
+    (r'아마\s*\d+', "추측"),
+    # 시간/거리 추정
+    (r'약\s*\d+\s*분', "추정 시간"),
+    (r'대략\s*\d+\s*분', "추정 시간"),
+    (r'도보\s*(?:약\s*)?\d+\s*분', "추정 도보 시간"),
+    (r'차량?\s*(?:약\s*)?\d+\s*분', "추정 차량 시간"),
+    (r'택시\s*(?:약\s*)?\d+\s*분', "추정 택시 시간"),
+    (r'약\s*[\d.]+\s*km', "추정 거리"),
+    (r'대략\s*[\d.]+\s*km', "추정 거리"),
+]
 
 # 리랭커 설정
 RERANKER_ENABLED = True  # Cross-Encoder 리랭커 사용 여부
@@ -45,12 +65,19 @@ VALID_QUERY_KEYWORDS = [
     "뷔페", "buffet", "부페",
     "다이닝", "dining", "식사", "밥", "먹",
     "바", "bar", "주류", "술", "와인", "wine", "칵테일", "cocktail", "맥주", "beer",
+    "콜키지", "corkage", "와인반입", "주류반입", "와인 반입", "주류 반입", "반입",
     "카페", "cafe", "커피", "coffee", "티", "tea", "베이커리", "bakery", "디저트", "dessert",
     "룸서비스", "room service", "인룸", "in-room",
     "델리", "deli", "테이크아웃", "takeout", "포장",
     "중식당", "일식", "한식", "양식", "이탈리안", "프렌치", "차이니즈", "chinese", "일본", "japanese", "korean",
     "미슐랭", "michelin", "파인다이닝", "fine dining",
     "아리아", "aria", "콘스탄스", "constans", "홍연", "팔레", "palais",
+    "잇투오", "eat2o", "그랑제이", "그랑 제이", "피크포인트", "피크 포인트",
+    "라망시크레", "라망 시크레", "마크다모르", "마크 다모르",
+    "티살롱", "티 살롱", "앤디쉬", "andish", "제로비티", "zerovity",
+    "부스트", "voost", "테라스292", "테라스 292", "조선델리", "조선 델리",
+    "이타닉", "이타닉 가든", "eatanic", "1914",
+    "헤븐리", "헤븐리 라운지", "라운지바", "라운지 바",
 
     # === 서비스 ===
     "주차", "parking", "발렛", "valet", "파킹", "셀프", "self",
@@ -448,3 +475,158 @@ HOTEL_INFO = {
     "lescape": {"name": "레스케이프", "phone": "02-317-4000", "locationUrl": "https://les.josunhotel.com/about/location.do"},
     "gravity_pangyo": {"name": "그래비티 판교", "phone": "031-539-4800", "locationUrl": "https://grp.josunhotel.com/about/location.do"},
 }
+
+# ==========================================
+# 레스토랑-호텔 엔티티 매핑 (24개 레스토랑)
+# ==========================================
+RESTAURANT_HOTEL_MAP = {
+    # === 조선 팰리스 (5개) ===
+    "콘스탄스": {
+        "hotel_id": "josun_palace",
+        "aliases": ["콘스탄스", "constans"],
+        "type": "뷔페",
+    },
+    "이타닉 가든": {
+        "hotel_id": "josun_palace",
+        "aliases": ["이타닉", "이타닉가든", "이타닉 가든", "eatanic", "eatanic garden"],
+        "type": "한식",
+    },
+    "더 그레이트 홍연": {
+        "hotel_id": "josun_palace",
+        "aliases": ["홍연", "hong yuan", "더그레이트홍연", "그레이트홍연"],
+        "type": "중식",
+    },
+    "1914 라운지앤바": {
+        "hotel_id": "josun_palace",
+        "aliases": ["1914", "라운지앤바", "1914라운지"],
+        "type": "라운지/바",
+    },
+    "조선델리 더 부티크": {
+        "hotel_id": "josun_palace",
+        "aliases": ["조선델리부티크", "조선델리 더 부티크", "조선델리더부티크"],
+        "type": "카페",
+    },
+
+    # === 그랜드 조선 부산 (4개) ===
+    "아리아(부산)": {
+        "hotel_id": "grand_josun_busan",
+        "aliases": ["아리아", "aria"],
+        "type": "뷔페",
+    },
+    "팔레드 신(부산)": {
+        "hotel_id": "grand_josun_busan",
+        "aliases": ["팔레드신", "팔레드 신", "팔레", "palais", "palais de chine"],
+        "type": "중식",
+    },
+    "테라스 292(부산)": {
+        "hotel_id": "grand_josun_busan",
+        "aliases": ["테라스292", "테라스 292", "terrace 292", "terrace292"],
+        "type": "라운지/바",
+    },
+    "조선 델리(부산)": {
+        "hotel_id": "grand_josun_busan",
+        "aliases": ["조선델리", "조선 델리", "josun deli"],
+        "type": "카페",
+    },
+
+    # === 그랜드 조선 제주 (6개) ===
+    "아리아(제주)": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["아리아", "aria"],
+        "type": "뷔페",
+    },
+    "잇투오": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["잇투오", "eat2o", "eat 2 o"],
+        "type": "올데이다이닝",
+    },
+    "피크포인트": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["피크포인트", "피크 포인트", "peak point", "peakpoint"],
+        "type": "그릴",
+    },
+    "그랑 제이": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["그랑제이", "그랑 제이", "gran j", "granj"],
+        "type": "라운지",
+    },
+    "헤븐리 라운지(제주)": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["헤븐리라운지", "헤븐리 라운지", "heavenly lounge"],
+        "type": "라운지",
+    },
+    "라운지바(제주)": {
+        "hotel_id": "grand_josun_jeju",
+        "aliases": ["라운지바", "라운지 바", "lounge bar"],
+        "type": "바",
+    },
+
+    # === 레스케이프 (5개) ===
+    "라망 시크레": {
+        "hotel_id": "lescape",
+        "aliases": ["라망시크레", "라망 시크레", "la maison", "la maison secrete"],
+        "type": "프렌치",
+    },
+    "팔레드 신(레스케이프)": {
+        "hotel_id": "lescape",
+        "aliases": ["팔레드신", "팔레드 신", "팔레", "palais", "palais de chine"],
+        "type": "중식",
+    },
+    "마크 다모르": {
+        "hotel_id": "lescape",
+        "aliases": ["마크다모르", "마크 다모르", "marque d'amour", "marque damour"],
+        "type": "카페/바",
+    },
+    "티 살롱": {
+        "hotel_id": "lescape",
+        "aliases": ["티살롱", "티 살롱", "tea salon", "teasalon"],
+        "type": "티/카페",
+    },
+    "조선 델리(레스케이프)": {
+        "hotel_id": "lescape",
+        "aliases": ["조선델리", "조선 델리", "josun deli"],
+        "type": "카페",
+    },
+
+    # === 그래비티 판교 (4개) ===
+    "앤디쉬": {
+        "hotel_id": "gravity_pangyo",
+        "aliases": ["앤디쉬", "andish", "and dish"],
+        "type": "뷔페",
+    },
+    "제로비티": {
+        "hotel_id": "gravity_pangyo",
+        "aliases": ["제로비티", "zerovity"],
+        "type": "라운지/바",
+    },
+    "부스트": {
+        "hotel_id": "gravity_pangyo",
+        "aliases": ["부스트", "voost"],
+        "type": "카페",
+    },
+    "조선 델리(판교)": {
+        "hotel_id": "gravity_pangyo",
+        "aliases": ["조선델리", "조선 델리", "josun deli"],
+        "type": "카페",
+    },
+}
+
+# 역방향 인덱스: alias → 레스토랑 목록 (자동 빌드)
+RESTAURANT_ALIAS_INDEX = {}
+for _restName, _restInfo in RESTAURANT_HOTEL_MAP.items():
+    for _alias in _restInfo["aliases"]:
+        _aliasLower = _alias.lower()
+        if _aliasLower not in RESTAURANT_ALIAS_INDEX:
+            RESTAURANT_ALIAS_INDEX[_aliasLower] = []
+        RESTAURANT_ALIAS_INDEX[_aliasLower].append({
+            "restaurant": _restName,
+            "hotel_id": _restInfo["hotel_id"],
+            "type": _restInfo["type"],
+        })
+
+# 중복 이름 레스토랑 (2개 이상 호텔에 존재)
+SHARED_RESTAURANT_NAMES = {}
+for _alias, _entries in RESTAURANT_ALIAS_INDEX.items():
+    _hotelIds = list(set(e["hotel_id"] for e in _entries))
+    if len(_hotelIds) >= 2:
+        SHARED_RESTAURANT_NAMES[_alias] = _hotelIds

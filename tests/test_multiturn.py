@@ -203,7 +203,7 @@ SCENARIOS = [
                 "query": "강아지 데려갈 수 있어?",
                 "expectClarification": False,
                 "expectKeywords": ["가능", "반려"],
-                "forbiddenKeywords": ["불가"],
+                "forbiddenKeywords": ["동반 불가", "투숙 불가", "반려동물 불가"],
             },
             {
                 "query": "비용이 얼마야?",

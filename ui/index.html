@@ -375,10 +375,15 @@
     }
 
     function renderMessages() {
-      // TTS 재생 중이면 GIF, 아니면 정적 이미지
+      // 아바타 상태: 생각중/음성준비중 → Thinking, 답변중 → play, 기본 → idle
+      const isThinking = state.messages.some(m => m.status === 'thinking');
+      const isTtsLoading = typeof TTSEngine !== 'undefined' && TTSEngine._state === 'loading';
       const isTtsPlaying = typeof TTSEngine !== 'undefined' && TTSEngine._state === 'playing';
-      const avatarSrc = isTtsPlaying ? '/static/bell_boy_play.gif' : '/static/bell_boy.png';
-      const speakingClass = isTtsPlaying ? 'avatar-speaking' : '';
+      const avatarSrc = isTtsPlaying ? '/static/bell_boy_play.gif'
+        : (isThinking || isTtsLoading) ? '/static/bell_boy_Thinking.gif'
+        : '/static/bell_boy.gif';
+      const speakingClass = isTtsPlaying ? 'avatar-speaking'
+        : (isThinking || isTtsLoading) ? 'avatar-thinking' : '';
       const hotelName = state.currentHotel ? state.currentHotel.name : '';
 
       return `

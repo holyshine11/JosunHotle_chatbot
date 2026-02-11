@@ -3,10 +3,13 @@ LLM Provider 추상화
 - 로컬: Ollama (timeout 30초)
 - 클라우드: Groq API (무료 tier)
 - 최대 2회 재시도
+- LRU 캐싱: 동일/유사 쿼리 재사용으로 응답 속도 향상
 """
 
 import os
 import time
+import hashlib
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Optional
 
@@ -18,10 +21,30 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
 LLM_MAX_RETRIES = 2
 
+# LLM 응답 캐시 설정
+LLM_CACHE_ENABLED = os.getenv("LLM_CACHE_ENABLED", "true").lower() == "true"
+LLM_CACHE_SIZE = int(os.getenv("LLM_CACHE_SIZE", "100"))  # 최대 100개 쿼리 캐싱
+
+
+def _generateCacheKey(prompt: str, system: str, temperature: float) -> str:
+    """캐시 키 생성 (프롬프트 + 시스템 + temperature 해시)"""
+    content = f"{prompt}|{system}|{temperature}"
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+
+# LRU 캐시 데코레이터를 사용한 내부 호출 함수
+@lru_cache(maxsize=LLM_CACHE_SIZE)
+def _cachedLLMCall(cacheKey: str, prompt: str, system: str, temperature: float) -> str:
+    """캐시 가능한 LLM 호출 (내부용)"""
+    if USE_GROQ and GROQ_API_KEY:
+        return _callGroq(prompt, system, temperature)
+    else:
+        return _callOllamaWithTimeout(prompt, system, temperature)
+
 
 def callLLM(prompt: str, system: str = "", temperature: float = 0.1) -> str:
     """
-    LLM 호출 (Ollama 또는 Groq)
+    LLM 호출 (Ollama 또는 Groq) - 캐싱 지원
 
     Args:
         prompt: 사용자 프롬프트
@@ -31,10 +54,33 @@ def callLLM(prompt: str, system: str = "", temperature: float = 0.1) -> str:
     Returns:
         생성된 텍스트
     """
-    if USE_GROQ and GROQ_API_KEY:
-        return _callGroq(prompt, system, temperature)
-    else:
-        return _callOllamaWithTimeout(prompt, system, temperature)
+    if not LLM_CACHE_ENABLED:
+        # 캐싱 비활성화 시 직접 호출
+        if USE_GROQ and GROQ_API_KEY:
+            return _callGroq(prompt, system, temperature)
+        else:
+            return _callOllamaWithTimeout(prompt, system, temperature)
+
+    # 캐싱 활성화 시
+    cacheKey = _generateCacheKey(prompt, system, temperature)
+
+    # 캐시 히트 체크
+    try:
+        result = _cachedLLMCall(cacheKey, prompt, system, temperature)
+        cacheInfo = _cachedLLMCall.cache_info()
+        hitRate = (cacheInfo.hits / (cacheInfo.hits + cacheInfo.misses) * 100) if (cacheInfo.hits + cacheInfo.misses) > 0 else 0
+
+        if cacheInfo.hits > 0:
+            print(f"[LLM 캐시] HIT (적중률: {hitRate:.1f}%, {cacheInfo.hits}/{cacheInfo.hits + cacheInfo.misses})")
+
+        return result
+    except Exception as e:
+        # 캐시 오류 시 직접 호출로 폴백
+        print(f"[LLM 캐시] 오류, 직접 호출로 전환: {e}")
+        if USE_GROQ and GROQ_API_KEY:
+            return _callGroq(prompt, system, temperature)
+        else:
+            return _callOllamaWithTimeout(prompt, system, temperature)
 
 
 def _callOllamaWithTimeout(prompt: str, system: str, temperature: float) -> str:
@@ -127,3 +173,28 @@ def checkLLMAvailable() -> tuple[bool, str]:
         return True, "Ollama (qwen2.5:7b)"
     except Exception:
         return False, "None"
+
+
+def getCacheStats() -> dict:
+    """캐시 통계 반환"""
+    if not LLM_CACHE_ENABLED:
+        return {"enabled": False}
+
+    cacheInfo = _cachedLLMCall.cache_info()
+    hitRate = (cacheInfo.hits / (cacheInfo.hits + cacheInfo.misses) * 100) if (cacheInfo.hits + cacheInfo.misses) > 0 else 0
+
+    return {
+        "enabled": True,
+        "hits": cacheInfo.hits,
+        "misses": cacheInfo.misses,
+        "hit_rate": round(hitRate, 2),
+        "current_size": cacheInfo.currsize,
+        "max_size": cacheInfo.maxsize,
+    }
+
+
+def clearCache():
+    """캐시 초기화"""
+    if LLM_CACHE_ENABLED:
+        _cachedLLMCall.cache_clear()
+        print("[LLM 캐시] 초기화 완료")

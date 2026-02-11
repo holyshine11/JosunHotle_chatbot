@@ -3,10 +3,14 @@ Cross-Encoder 기반 리랭커 (transformers 직접 사용)
 - 검색 결과 재정렬로 관련성 향상
 - 무관한 청크 필터링으로 할루시네이션 방지
 - Lazy loading (첫 검색 시 모델 로드)
+- 배치 처리로 추론 속도 향상
+- 쿼리별 점수 캐싱으로 중복 계산 방지
 """
 
 import re
 import time
+import hashlib
+from functools import lru_cache
 import numpy as np
 
 
@@ -27,6 +31,9 @@ class Reranker:
         self._model = None
         self._tokenizer = None
         self._loadFailed = False
+        self._scoreCache = {}  # 쿼리-청크 쌍별 점수 캐시
+        self._cacheHits = 0
+        self._cacheMisses = 0
 
     def _loadModel(self):
         """모델 로드 (첫 호출 시)"""
@@ -53,6 +60,11 @@ class Reranker:
             print(f"[리랭커] 모델 로드 실패: {e}")
             self._loadFailed = True
 
+    def _generateChunkKey(self, query: str, chunkText: str) -> str:
+        """쿼리-청크 쌍의 캐시 키 생성"""
+        content = f"{query}|{chunkText[:200]}"  # 청크 텍스트는 앞 200자만 사용
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+
     def rerank(self, query: str, chunks: list, topK: int = 5) -> list:
         """검색 결과 리랭킹
 
@@ -73,28 +85,64 @@ class Reranker:
             print("[리랭커] 모델 없음, 원본 순서 유지")
             return chunks[:topK]
 
-        # Cross-Encoder 점수 계산
+        # Cross-Encoder 점수 계산 (배치 처리 + 캐싱)
         try:
             import torch
 
             startTime = time.time()
             rawScores = []
+            pairsToCompute = []
+            indexMap = []  # 계산할 청크의 원본 인덱스
 
-            with torch.no_grad():
-                for chunk in chunks:
-                    text = chunk.get("text", "")
+            # 캐시 체크
+            for i, chunk in enumerate(chunks):
+                text = chunk.get("text", "")
+                cacheKey = self._generateChunkKey(query, text)
+
+                if cacheKey in self._scoreCache:
+                    # 캐시 히트
+                    rawScores.append(self._scoreCache[cacheKey])
+                    self._cacheHits += 1
+                else:
+                    # 캐시 미스: 계산 필요
+                    rawScores.append(None)  # 나중에 채울 자리
+                    pairsToCompute.append([query, text])
+                    indexMap.append(i)
+                    self._cacheMisses += 1
+
+            # 캐시 미스 청크만 배치 처리
+            if pairsToCompute:
+                with torch.no_grad():
+                    # 배치 토크나이징 (padding으로 길이 통일)
                     inputs = self._tokenizer(
-                        [[query, text]],
+                        pairsToCompute,
                         padding=True,
                         truncation=True,
                         return_tensors="pt",
                         max_length=512
                     )
-                    score = self._model(**inputs, return_dict=True).logits.view(-1,).float().item()
-                    rawScores.append(score)
+
+                    # 배치 추론 (한 번에 모든 점수 계산)
+                    logits = self._model(**inputs, return_dict=True).logits
+                    computedScores = logits.view(-1).float().tolist()
+
+                    # 계산된 점수를 캐시에 저장 및 결과에 반영
+                    for idx, score in zip(indexMap, computedScores):
+                        rawScores[idx] = score
+                        text = chunks[idx].get("text", "")
+                        cacheKey = self._generateChunkKey(query, text)
+                        self._scoreCache[cacheKey] = score
+
+                        # 캐시 크기 제한 (100개 초과 시 오래된 항목 제거)
+                        if len(self._scoreCache) > 100:
+                            # 가장 오래된 항목 제거 (FIFO)
+                            oldestKey = next(iter(self._scoreCache))
+                            del self._scoreCache[oldestKey]
 
             elapsed = time.time() - startTime
-            print(f"[리랭커] {len(chunks)}개 청크 점수 계산 ({elapsed * 1000:.0f}ms)")
+            totalRequests = self._cacheHits + self._cacheMisses
+            hitRate = (self._cacheHits / totalRequests * 100) if totalRequests > 0 else 0
+            print(f"[리랭커] {len(chunks)}개 청크 점수 계산 ({elapsed * 1000:.0f}ms, 캐시: {self._cacheHits}/{totalRequests} = {hitRate:.1f}%)")
 
         except Exception as e:
             print(f"[리랭커] 점수 계산 실패: {e}")
@@ -182,6 +230,25 @@ class Reranker:
         """모델 사용 가능 여부"""
         self._loadModel()
         return self._model is not None
+
+    def getCacheStats(self) -> dict:
+        """캐시 통계 반환"""
+        totalRequests = self._cacheHits + self._cacheMisses
+        hitRate = (self._cacheHits / totalRequests * 100) if totalRequests > 0 else 0
+
+        return {
+            "cache_hits": self._cacheHits,
+            "cache_misses": self._cacheMisses,
+            "hit_rate": round(hitRate, 2),
+            "cache_size": len(self._scoreCache),
+        }
+
+    def clearCache(self):
+        """캐시 초기화"""
+        self._scoreCache.clear()
+        self._cacheHits = 0
+        self._cacheMisses = 0
+        print("[리랭커] 캐시 초기화 완료")
 
 
 # 싱글톤 인스턴스 (lazy loading)
