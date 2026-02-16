@@ -9,6 +9,7 @@ FastAPI 기반 RAG 챗봇 서버
 import os
 import sys
 import io
+import json
 import asyncio
 import traceback
 from pathlib import Path
@@ -59,9 +60,12 @@ def getRagGraph():
 
 class ChatRequest(BaseModel):
     hotelId: str
-    message: str
+    message: str = ""
     history: Optional[List[dict]] = None
     sessionId: Optional[str] = None  # 세션 ID (없으면 자동 생성)
+
+    def hasValidMessage(self) -> bool:
+        return bool(self.message and self.message.strip())
 
 
 class ChatResponse(BaseModel):
@@ -111,6 +115,61 @@ async def health():
     return status
 
 
+@app.post("/chat/stream")
+async def chatStream(request: ChatRequest):
+    """SSE 스트리밍 채팅 엔드포인트"""
+    async def eventGenerator():
+        try:
+            from rag.session import sessionStore
+            sessionCtx = sessionStore.getOrCreate(request.sessionId)
+
+            # 즉시 status 이벤트 전송 (체감 속도 향상)
+            yield f"data: {json.dumps({'event': 'status', 'stage': 'analyzing', 'message': '질문을 분석하고 있습니다...'}, ensure_ascii=False)}\n\n"
+
+            rag = getRagGraph()
+
+            # asyncio.to_thread로 이벤트 루프 블로킹 방지
+            result = await asyncio.to_thread(
+                rag.chat,
+                query=request.message,
+                hotel=request.hotelId,
+                history=request.history,
+                sessionCtx=sessionCtx
+            )
+
+            answer = result.get("answer", "응답을 생성할 수 없습니다.")
+            needsClarification = result.get("needs_clarification", False)
+
+            if needsClarification:
+                yield f"data: {json.dumps({'event': 'clarification', 'answer': answer, 'options': result.get('clarification_options', []), 'type': result.get('clarification_type'), 'originalQuery': result.get('original_query')}, ensure_ascii=False)}\n\n"
+            else:
+                # 답변을 단어 단위로 스트리밍 (타이핑 효과)
+                words = answer.split()
+                for i, word in enumerate(words):
+                    separator = ' ' if i < len(words) - 1 else ''
+                    yield f"data: {json.dumps({'event': 'token', 'text': word + separator}, ensure_ascii=False)}\n\n"
+                    if i % 3 == 0:
+                        await asyncio.sleep(0.02)
+
+            # 완료 이벤트 (출처, 점수 등 메타데이터)
+            yield f"data: {json.dumps({'event': 'done', 'sources': result.get('sources', []), 'score': result.get('score'), 'sessionId': sessionCtx.session_id}, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            print(f"[스트리밍 에러] {e}")
+            traceback.print_exc()
+            yield f"data: {json.dumps({'event': 'error', 'message': '요청을 처리하는 중 오류가 발생했습니다.'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        eventGenerator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """채팅 엔드포인트"""
@@ -121,11 +180,14 @@ async def chat(request: ChatRequest):
         sessionCtx = sessionStore.getOrCreate(request.sessionId)
 
         rag = getRagGraph()
-        result = rag.chat(
+
+        # asyncio.to_thread로 이벤트 루프 블로킹 방지
+        result = await asyncio.to_thread(
+            rag.chat,
             query=request.message,
             hotel=request.hotelId,
             history=request.history,
-            sessionCtx=sessionCtx  # 세션 컨텍스트 전달
+            sessionCtx=sessionCtx
         )
 
         return ChatResponse(

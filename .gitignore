@@ -30,3 +30,14 @@ logs/
 
 # Secrets
 *.env.local
+
+# Playwright MCP (브라우저 테스트 아티팩트)
+.playwright-mcp/
+
+# bkit 플러그인 아티팩트
+docs/.pdca-snapshots/
+docs/.pdca-status.json
+docs/.bkit-memory.json
+
+# 에이전트 실행 결과
+agents/results/

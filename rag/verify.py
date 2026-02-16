@@ -24,6 +24,51 @@ _CONFIG_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'config')
 class AnswerVerifier:
     """답변 검증기 - graph.py의 answerVerifyNode에서 사용"""
 
+    # 사전 컴파일 정규식 — extractNumbers
+    _RE_PRICES = re.compile(r'[\d,]+\s*원')
+    _RE_TIMES = re.compile(r'\d{1,2}:\d{2}')
+    _RE_PHONES = re.compile(r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}')
+    _RE_PERCENTS = re.compile(r'\d+\s*%')
+    _RE_FLOORS = re.compile(r'\d+\s*층')
+    _RE_PERSONS = re.compile(r'\d+\s*인')
+    _RE_WEIGHTS = re.compile(r'\d+\s*kg', re.IGNORECASE)
+    _RE_AGES = re.compile(r'\d+\s*세')
+    _RE_FULL_DATES = re.compile(r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일')
+    _RE_MONTH_DAYS = re.compile(r'\d{1,2}월\s*\d{1,2}일')
+
+    # 사전 컴파일 정규식 — checkResponseQuality 의미없는 패턴
+    _MEANINGLESS_PATTERNS = [
+        (re.compile(r'宫咚咚'), "중국어 의미없는 패턴"),
+        (re.compile(r'参考资料'), "중국어 안내 문구"),
+        (re.compile(r'无法提供'), "중국어 안내 문구"),
+        (re.compile(r'\?\?+'), "반복 물음표"),
+        (re.compile(r'！！+'), "반복 느낌표"),
+        (re.compile(r'\.\.\.\.+'), "과도한 말줄임"),
+    ]
+
+    # 사전 컴파일 정규식 — checkResponseQuality 금지 패턴
+    _FORBIDDEN_PATTERNS = [
+        (re.compile(r'궁금하신가요', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'더\s*필요하신\s*것', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'어떤\s*것이?\s*궁금', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'도움이?\s*되셨', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'추가.*질문', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'알려주시면', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'말씀해\s*주시', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'문의.*주시면', re.IGNORECASE | re.MULTILINE), "금지 문구"),
+        (re.compile(r'^\s*-\s*-\s*$', re.IGNORECASE | re.MULTILINE), "빈 내용"),
+        (re.compile(r'정보가\s*없습니다.*문의', re.IGNORECASE | re.MULTILINE), "잘못된 안내"),
+    ]
+
+    # 사전 컴파일 정규식 — checkTransportationHallucination
+    _TRANSPORT_PATTERNS = [
+        (re.compile(r'\d+호선'), "지하철 노선"),
+        (re.compile(r'지하철\s*[가-힣]+선'), "지하철 노선명"),
+        (re.compile(r'버스\s*\d+번?'), "버스 노선"),
+        (re.compile(r'[가-힣]+역에서\s*[가-힣]+역'), "지하철 경로"),
+        (re.compile(r'환승|갈아타'), "환승 안내"),
+    ]
+
     def __init__(self):
         self.knownNames = self._loadKnownNames()
         self.forbiddenPhrases = self._loadForbiddenPatterns()
@@ -122,29 +167,16 @@ class AnswerVerifier:
     def extractNumbers(self, text: str) -> set[str]:
         """텍스트에서 숫자 정보 추출 (가격, 시간, 전화번호, 층수, 날짜)"""
         numbers = set()
-        prices = re.findall(r'[\d,]+\s*원', text)
-        numbers.update(prices)
-        times = re.findall(r'\d{1,2}:\d{2}', text)
-        numbers.update(times)
-        phones = re.findall(r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', text)
-        numbers.update(phones)
-        percents = re.findall(r'\d+\s*%', text)
-        numbers.update(percents)
-        floors = re.findall(r'\d+\s*층', text)
-        numbers.update(floors)
-        persons = re.findall(r'\d+\s*인', text)
-        numbers.update(persons)
-        # 무게 (반려동물 관련)
-        weights = re.findall(r'\d+\s*kg', text, re.IGNORECASE)
-        numbers.update(weights)
-        # 연령
-        ages = re.findall(r'\d+\s*세', text)
-        numbers.update(ages)
-        # 날짜 (년월일)
-        dates = re.findall(r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일', text)
-        numbers.update(dates)
-        monthDays = re.findall(r'\d{1,2}월\s*\d{1,2}일', text)
-        numbers.update(monthDays)
+        numbers.update(self._RE_PRICES.findall(text))
+        numbers.update(self._RE_TIMES.findall(text))
+        numbers.update(self._RE_PHONES.findall(text))
+        numbers.update(self._RE_PERCENTS.findall(text))
+        numbers.update(self._RE_FLOORS.findall(text))
+        numbers.update(self._RE_PERSONS.findall(text))
+        numbers.update(self._RE_WEIGHTS.findall(text))
+        numbers.update(self._RE_AGES.findall(text))
+        numbers.update(self._RE_FULL_DATES.findall(text))
+        numbers.update(self._RE_MONTH_DAYS.findall(text))
         return numbers
 
     def checkResponseQuality(self, answer: str, query: str) -> tuple[bool, list[str]]:
@@ -183,17 +215,9 @@ class AnswerVerifier:
         if totalChars > 5 and koreanChars / totalChars < 0.25:
             issues.append(f"비정상: 한글 비율 낮음 ({koreanChars}/{totalChars})")
 
-        # 3. 의미 없는 패턴 탐지
-        meaninglessPatterns = [
-            (r'宫咚咚', "중국어 의미없는 패턴"),
-            (r'参考资料', "중국어 안내 문구"),
-            (r'无法提供', "중국어 안내 문구"),
-            (r'\?\?+', "반복 물음표"),
-            (r'！！+', "반복 느낌표"),
-            (r'\.\.\.\.+', "과도한 말줄임"),
-        ]
-        for pattern, desc in meaninglessPatterns:
-            if re.search(pattern, answer):
+        # 3. 의미 없는 패턴 탐지 (사전 컴파일 사용)
+        for compiledPattern, desc in self._MEANINGLESS_PATTERNS:
+            if compiledPattern.search(answer):
                 issues.append(f"비정상: {desc}")
                 break
 
@@ -202,21 +226,9 @@ class AnswerVerifier:
         if len(cleanAnswer) < 5:
             issues.append("비정상: 답변이 너무 짧음")
 
-        # 5. 금지 패턴 탐지
-        forbiddenPatterns = [
-            (r'궁금하신가요', "금지 문구"),
-            (r'더\s*필요하신\s*것', "금지 문구"),
-            (r'어떤\s*것이?\s*궁금', "금지 문구"),
-            (r'도움이?\s*되셨', "금지 문구"),
-            (r'추가.*질문', "금지 문구"),
-            (r'알려주시면', "금지 문구"),
-            (r'말씀해\s*주시', "금지 문구"),
-            (r'문의.*주시면', "금지 문구"),
-            (r'^\s*-\s*-\s*$', "빈 내용"),
-            (r'정보가\s*없습니다.*문의', "잘못된 안내"),
-        ]
-        for pattern, desc in forbiddenPatterns:
-            if re.search(pattern, answer, re.IGNORECASE | re.MULTILINE):
+        # 5. 금지 패턴 탐지 (사전 컴파일 사용)
+        for compiledPattern, desc in self._FORBIDDEN_PATTERNS:
+            if compiledPattern.search(answer):
                 issues.append(f"금지패턴: {desc}")
 
         return len(issues) == 0, issues
@@ -225,9 +237,9 @@ class AnswerVerifier:
         """chunk에서 직접 답변 추출 (Fallback용)"""
         directAnswer = None
 
-        # 1. Q&A 형식에서 A: 부분 추출
+        # 1. Q&A 형식에서 A: 부분 추출 (다음 Q: 또는 텍스트 끝까지)
         if "A:" in topText:
-            aMatch = re.search(r'A:\s*(.+?)(?:\n\n|$)', topText, re.DOTALL)
+            aMatch = re.search(r'A:\s*(.+?)(?=\nQ:|\Z)', topText, re.DOTALL)
             if aMatch:
                 directAnswer = aMatch.group(1).strip()
 
@@ -283,16 +295,8 @@ class AnswerVerifier:
         issues = []
         cleanedAnswer = answer
 
-        transportPatterns = [
-            (r'\d+호선', "지하철 노선"),
-            (r'지하철\s*[가-힣]+선', "지하철 노선명"),
-            (r'버스\s*\d+번?', "버스 노선"),
-            (r'[가-힣]+역에서\s*[가-힣]+역', "지하철 경로"),
-            (r'환승|갈아타', "환승 안내"),
-        ]
-
-        for pattern, desc in transportPatterns:
-            matches = re.findall(pattern, answer)
+        for compiledPattern, desc in self._TRANSPORT_PATTERNS:
+            matches = compiledPattern.findall(answer)
             for match in matches:
                 if match not in context:
                     issues.append(f"교통편 날조: '{match}' ({desc}) — 컨텍스트에 없음")
@@ -302,8 +306,8 @@ class AnswerVerifier:
             filteredSentences = []
             for sentence in sentences:
                 hasTransportFabrication = False
-                for pattern, _ in transportPatterns:
-                    matches = re.findall(pattern, sentence)
+                for compiledPattern, _ in self._TRANSPORT_PATTERNS:
+                    matches = compiledPattern.findall(sentence)
                     for match in matches:
                         if match not in context:
                             hasTransportFabrication = True

@@ -26,23 +26,23 @@ LLM_CACHE_ENABLED = os.getenv("LLM_CACHE_ENABLED", "true").lower() == "true"
 LLM_CACHE_SIZE = int(os.getenv("LLM_CACHE_SIZE", "100"))  # 최대 100개 쿼리 캐싱
 
 
-def _generateCacheKey(prompt: str, system: str, temperature: float) -> str:
-    """캐시 키 생성 (프롬프트 + 시스템 + temperature 해시)"""
-    content = f"{prompt}|{system}|{temperature}"
+def _generateCacheKey(prompt: str, system: str, temperature: float, maxTokens: int = 512) -> str:
+    """캐시 키 생성 (프롬프트 + 시스템 + temperature + maxTokens 해시)"""
+    content = f"{prompt}|{system}|{temperature}|{maxTokens}"
     return hashlib.md5(content.encode('utf-8')).hexdigest()
 
 
 # LRU 캐시 데코레이터를 사용한 내부 호출 함수
 @lru_cache(maxsize=LLM_CACHE_SIZE)
-def _cachedLLMCall(cacheKey: str, prompt: str, system: str, temperature: float) -> str:
+def _cachedLLMCall(cacheKey: str, prompt: str, system: str, temperature: float, maxTokens: int = 512) -> str:
     """캐시 가능한 LLM 호출 (내부용)"""
     if USE_GROQ and GROQ_API_KEY:
-        return _callGroq(prompt, system, temperature)
+        return _callGroq(prompt, system, temperature, maxTokens)
     else:
-        return _callOllamaWithTimeout(prompt, system, temperature)
+        return _callOllamaWithTimeout(prompt, system, temperature, maxTokens)
 
 
-def callLLM(prompt: str, system: str = "", temperature: float = 0.1) -> str:
+def callLLM(prompt: str, system: str = "", temperature: float = 0.1, maxTokens: int = 512) -> str:
     """
     LLM 호출 (Ollama 또는 Groq) - 캐싱 지원
 
@@ -50,61 +50,73 @@ def callLLM(prompt: str, system: str = "", temperature: float = 0.1) -> str:
         prompt: 사용자 프롬프트
         system: 시스템 프롬프트
         temperature: 생성 온도 (0.0 ~ 1.0)
+        maxTokens: 최대 생성 토큰 수 (기본 512)
 
     Returns:
         생성된 텍스트
     """
+    startTime = time.time()
+
     if not LLM_CACHE_ENABLED:
-        # 캐싱 비활성화 시 직접 호출
         if USE_GROQ and GROQ_API_KEY:
-            return _callGroq(prompt, system, temperature)
+            result = _callGroq(prompt, system, temperature, maxTokens)
         else:
-            return _callOllamaWithTimeout(prompt, system, temperature)
+            result = _callOllamaWithTimeout(prompt, system, temperature, maxTokens)
+        elapsed = time.time() - startTime
+        print(f"[LLM] 호출 완료 ({elapsed:.1f}s, maxTokens={maxTokens})")
+        return result
 
     # 캐싱 활성화 시
-    cacheKey = _generateCacheKey(prompt, system, temperature)
+    cacheKey = _generateCacheKey(prompt, system, temperature, maxTokens)
 
-    # 캐시 히트 체크
     try:
-        result = _cachedLLMCall(cacheKey, prompt, system, temperature)
+        result = _cachedLLMCall(cacheKey, prompt, system, temperature, maxTokens)
+        elapsed = time.time() - startTime
         cacheInfo = _cachedLLMCall.cache_info()
         hitRate = (cacheInfo.hits / (cacheInfo.hits + cacheInfo.misses) * 100) if (cacheInfo.hits + cacheInfo.misses) > 0 else 0
 
         if cacheInfo.hits > 0:
-            print(f"[LLM 캐시] HIT (적중률: {hitRate:.1f}%, {cacheInfo.hits}/{cacheInfo.hits + cacheInfo.misses})")
+            print(f"[LLM 캐시] HIT ({elapsed:.1f}s, 적중률: {hitRate:.1f}%)")
 
         return result
+    except (TimeoutError, FuturesTimeout) as e:
+        # LLM 타임아웃은 재시도 무의미 (Ollama 과부하) → 즉시 전파
+        print(f"[LLM] 타임아웃 — 재시도 없이 즉시 실패: {e}")
+        raise
     except Exception as e:
-        # 캐시 오류 시 직접 호출로 폴백
         print(f"[LLM 캐시] 오류, 직접 호출로 전환: {e}")
         if USE_GROQ and GROQ_API_KEY:
-            return _callGroq(prompt, system, temperature)
+            return _callGroq(prompt, system, temperature, maxTokens)
         else:
-            return _callOllamaWithTimeout(prompt, system, temperature)
+            return _callOllamaWithTimeout(prompt, system, temperature, maxTokens)
 
 
-def _callOllamaWithTimeout(prompt: str, system: str, temperature: float) -> str:
-    """Ollama 호출 (timeout + retry)"""
+def _callOllamaWithTimeout(prompt: str, system: str, temperature: float, maxTokens: int = 512) -> str:
+    """Ollama 호출 (timeout + retry, shutdown 대기 없음)"""
     lastError = None
     for attempt in range(1, LLM_MAX_RETRIES + 1):
+        executor = ThreadPoolExecutor(max_workers=1)
         try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_callOllama, prompt, system, temperature)
-                result = future.result(timeout=LLM_TIMEOUT)
-                return result
+            future = executor.submit(_callOllama, prompt, system, temperature, maxTokens)
+            result = future.result(timeout=LLM_TIMEOUT)
+            executor.shutdown(wait=False)
+            return result
         except FuturesTimeout:
             lastError = f"Ollama 응답 시간 초과 ({LLM_TIMEOUT}초)"
             print(f"[LLM] timeout (시도 {attempt}/{LLM_MAX_RETRIES})")
+            # shutdown(wait=False): 타임아웃된 스레드 대기하지 않음
+            executor.shutdown(wait=False)
         except Exception as e:
             lastError = str(e)
             print(f"[LLM] 오류 (시도 {attempt}/{LLM_MAX_RETRIES}): {e}")
+            executor.shutdown(wait=False)
         if attempt < LLM_MAX_RETRIES:
             time.sleep(1)
 
     raise TimeoutError(f"LLM 호출 실패 ({LLM_MAX_RETRIES}회 시도): {lastError}")
 
 
-def _callOllama(prompt: str, system: str, temperature: float) -> str:
+def _callOllama(prompt: str, system: str, temperature: float, maxTokens: int = 512) -> str:
     """Ollama 로컬 LLM 호출"""
     import ollama
 
@@ -116,13 +128,13 @@ def _callOllama(prompt: str, system: str, temperature: float) -> str:
     response = ollama.chat(
         model="qwen2.5:7b",
         messages=messages,
-        options={"temperature": temperature}
+        options={"temperature": temperature, "num_predict": maxTokens}
     )
 
     return response["message"]["content"]
 
 
-def _callGroq(prompt: str, system: str, temperature: float) -> str:
+def _callGroq(prompt: str, system: str, temperature: float, maxTokens: int = 512) -> str:
     """Groq API 호출 (클라우드 배포용)"""
     import requests
 
@@ -137,10 +149,10 @@ def _callGroq(prompt: str, system: str, temperature: float) -> str:
     messages.append({"role": "user", "content": prompt})
 
     data = {
-        "model": "llama-3.1-8b-instant",  # 무료 tier에서 사용 가능
+        "model": "llama-3.1-8b-instant",
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": 1024
+        "max_tokens": maxTokens
     }
 
     response = requests.post(

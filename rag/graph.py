@@ -10,6 +10,7 @@ LangGraph 기반 RAG 플로우
 import re
 import json
 import os
+import time
 from datetime import datetime
 from typing import TypedDict, Literal, Optional
 from pathlib import Path
@@ -187,6 +188,7 @@ class RAGGraph:
 
     def queryRewriteNode(self, state: RAGState) -> RAGState:
         """쿼리 재작성 노드: 대화 맥락을 반영하여 질문을 완전한 형태로 재작성"""
+        _start = time.time()
         query = state["query"]
         history = state.get("history") or []
 
@@ -319,11 +321,18 @@ class RAGGraph:
 [재작성된 질문]"""
 
         try:
-            # LLM Provider를 통한 쿼리 재작성
-            rewrittenQuery = callLLM(
-                prompt=rewritePrompt,
-                temperature=0.0
-            ).strip()
+            # LLM Provider를 통한 쿼리 재작성 (maxTokens=100 으로 제한)
+            try:
+                rewrittenQuery = callLLM(
+                    prompt=rewritePrompt,
+                    temperature=0.0,
+                    maxTokens=100
+                ).strip()
+            except TypeError:
+                rewrittenQuery = callLLM(
+                    prompt=rewritePrompt,
+                    temperature=0.0
+                ).strip()
 
             # 빈 응답이나 너무 긴 응답 방지
             if not rewrittenQuery or len(rewrittenQuery) > 200:
@@ -337,7 +346,17 @@ class RAGGraph:
         except Exception as e:
             print(f"[쿼리 재작성 오류] {e}")
             rewrittenQuery = query
+            # LLM 실패 플래그: answerCompose에서 LLM 재호출 방지 (연쇄 타임아웃 차단)
+            _elapsed = time.time() - _start
+            print(f"[타이밍] queryRewrite: {_elapsed:.3f}s (LLM 실패)")
+            return {
+                **state,
+                "rewritten_query": rewrittenQuery,
+                "llm_failed": True,
+            }
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] queryRewrite: {_elapsed:.3f}s")
         return {
             **state,
             "rewritten_query": rewrittenQuery,
@@ -355,6 +374,7 @@ class RAGGraph:
         - 히스토리에서 이미 명확화가 발생한 맥락은 재명확화 차단
         - 구체적 대상(시설, 정책 등)이 있으면 명확화보다 검색 우선
         """
+        _start = time.time()
         # 모호성 판단은 원본 쿼리 기준 (LLM 재작성이 추가한 키워드 무시)
         originalQuery = state.get("query", "").strip()
         originalQueryLower = originalQuery.lower()
@@ -579,6 +599,8 @@ class RAGGraph:
                     break
 
         if needsClarification:
+            _elapsed = time.time() - _start
+            print(f"[타이밍] clarificationCheck: {_elapsed:.3f}s")
             return {
                 **state,
                 "needs_clarification": True,
@@ -589,6 +611,8 @@ class RAGGraph:
                 "final_answer": clarificationQuestion,
             }
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] clarificationCheck: {_elapsed:.3f}s")
         return {
             **state,
             "needs_clarification": False,
@@ -598,6 +622,7 @@ class RAGGraph:
 
     def preprocessNode(self, state: RAGState) -> RAGState:
         """전처리 노드: 입력 정규화, 언어/호텔/카테고리 감지"""
+        _start = time.time()
         # 재작성된 쿼리 사용 (없으면 원본)
         query = (state.get("rewritten_query") or state["query"]).strip()
         userHotel = state.get("hotel")
@@ -681,6 +706,8 @@ class RAGGraph:
             restaurantRedirectMsg = entityResult["message"]
             print(f"[엔티티 명확화] {entityResult['matched_alias']} → 호텔 선택 필요")
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] preprocess: {_elapsed:.3f}s")
         return {
             **state,
             "language": language,
@@ -699,6 +726,7 @@ class RAGGraph:
         - 같은 주제 후속 질문 시 캐시 우선 검색
         - 카테고리 필터는 후속 질문에서만 적용 (컨텍스트 오염 방지)
         """
+        _start = time.time()
         query = state["normalized_query"]
         hotel = state["detected_hotel"]
         detectedCategory = state.get("category")
@@ -804,6 +832,8 @@ class RAGGraph:
         # 최고 점수 계산: 리랭킹 후 순서가 바뀌므로 전체 결과 중 최고 점수 사용
         topScore = max((r["score"] for r in results), default=0.0) if results else 0.0
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] retrieve: {_elapsed:.3f}s")
         return {
             **state,
             "retrieved_chunks": results,
@@ -814,6 +844,7 @@ class RAGGraph:
 
     def evidenceGateNode(self, state: RAGState) -> RAGState:
         """근거 검증 노드: 검색 결과 품질 확인"""
+        _start = time.time()
         chunks = state["retrieved_chunks"]
         topScore = state["top_score"]
         isValidQuery = state.get("is_valid_query", True)
@@ -840,6 +871,8 @@ class RAGGraph:
         else:
             reason = "근거 검증 통과"
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] evidenceGate: {_elapsed:.3f}s")
         return {
             **state,
             "evidence_passed": passed,
@@ -854,6 +887,7 @@ class RAGGraph:
         - URL 메타데이터에서 핵심 상세 정보 추출하여 컨텍스트에 포함
         - 청크 간 보완 관계 분석으로 완성도 높은 답변 생성
         """
+        _start = time.time()
         chunks = state["retrieved_chunks"]
         query = state["normalized_query"]
         hotel = state.get("detected_hotel")
@@ -910,10 +944,30 @@ class RAGGraph:
                 "sources": [src["url"] for src in sources],
             }
 
-        # LLM 사용 여부에 따라 분기
+        # LLM 사용 여부에 따라 분기 (queryRewrite에서 LLM 실패했으면 건너뜀)
         usedRefs = []
-        if self.LLM_ENABLED:
+        llmFailed = state.get("llm_failed", False)
+        if llmFailed:
+            print(f"[answerCompose] queryRewrite LLM 실패 감지 → LLM 건너뛰고 chunk 직접 추출")
+
+        if self.LLM_ENABLED and not llmFailed:
             answer = self._generateWithLLM(query, context, hotel)
+
+            # LLM 실패 감지 → top chunk 직접 추출 fallback
+            llmFailed = "일시적인 오류로 답변을 생성하지 못했습니다" in answer
+            if llmFailed and chunks:
+                from rag.verify import answerVerifier
+                for chunk in chunks[:3]:
+                    chunkText = chunk.get("text", "")
+                    extracted = answerVerifier.extractDirectAnswer(chunkText, query)
+                    if extracted and len(extracted) >= 10:
+                        chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
+                        answer = extracted
+                        if chunkUrl:
+                            answer += f"\n\n참고 정보: {chunkUrl}"
+                        usedRefs = [1]
+                        print(f"[LLM 실패 Fallback] chunk에서 직접 추출: {extracted[:80]}...")
+                        break
 
             # [REF:1,3] 형태의 참조 번호 파싱
             refMatch = re.search(r'\[REF:([0-9,\s]+)\]', answer)
@@ -923,15 +977,25 @@ class RAGGraph:
                 # 답변에서 [REF:...] 제거 (사용자에게는 보이지 않도록)
                 answer = re.sub(r'\s*\[REF:[0-9,\s]+\]', '', answer).strip()
         else:
-            # LLM 미사용 시 검색 결과 직접 반환
-            topChunk = chunks[0]
-            answer = topChunk["text"]
-            if "A:" in answer:
-                answer = answer.split("A:")[-1].strip()
-            hotelName = topChunk["metadata"].get("hotel_name", "")
-            if hotelName:
-                answer = f"[{hotelName}] {answer}"
-            usedRefs = [1]  # LLM 미사용시 첫번째 청크만 사용
+            # LLM 미사용 또는 LLM 실패 시 — chunk 직접 추출
+            from rag.verify import answerVerifier
+            answer = None
+            for chunk in chunks[:3]:
+                chunkText = chunk.get("text", "")
+                extracted = answerVerifier.extractDirectAnswer(chunkText, query)
+                if extracted and len(extracted) >= 10:
+                    answer = extracted
+                    break
+            # extractDirectAnswer 실패 시 기본 추출
+            if not answer:
+                topChunk = chunks[0]
+                answer = topChunk["text"]
+                if "A:" in answer:
+                    answer = answer.split("A:")[-1].strip()
+                hotelName = topChunk["metadata"].get("hotel_name", "")
+                if hotelName:
+                    answer = f"[{hotelName}] {answer}"
+            usedRefs = [1]
 
         # 사용된 참조의 URL만 필터링
         usedSources = []
@@ -948,6 +1012,8 @@ class RAGGraph:
         if redirectMsg and answer:
             answer = f"{redirectMsg}\n\n{answer}"
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] answerCompose: {_elapsed:.3f}s")
         return {
             **state,
             "answer": answer,
@@ -1348,12 +1414,20 @@ class RAGGraph:
 체크인은 15시, 체크아웃은 11시입니다. [REF:1,3]"""
 
         try:
-            # LLM Provider를 통한 답변 생성
-            answer = callLLM(
-                prompt=userPrompt,
-                system=systemPrompt,
-                temperature=0.0
-            ).strip()
+            # LLM Provider를 통한 답변 생성 (maxTokens=512)
+            try:
+                answer = callLLM(
+                    prompt=userPrompt,
+                    system=systemPrompt,
+                    temperature=0.0,
+                    maxTokens=512
+                ).strip()
+            except TypeError:
+                answer = callLLM(
+                    prompt=userPrompt,
+                    system=systemPrompt,
+                    temperature=0.0
+                ).strip()
 
             # 후처리: 중국어/일본어 문자 제거 (qwen 모델의 할루시네이션 방지)
             # 중국어 한자 범위: \u4e00-\u9fff
@@ -1390,11 +1464,15 @@ class RAGGraph:
 
             return answer
         except Exception as e:
-            # LLM 실패 시 에러 로깅 후 컨텍스트 요약 반환
+            # LLM 실패 시 에러 로깅 후 호텔 연락처 안내 (raw chunk 노출 금지)
             import traceback
             print(f"[LLM 에러] {type(e).__name__}: {e}")
             traceback.print_exc()
-            return f"[시스템 오류] LLM 응답 실패. 검색된 정보: {context[:200]}..."
+
+            # 호텔 연락처 기반 안내 메시지 반환
+            if hotelName and hotelPhone:
+                return f"죄송합니다, 일시적인 오류로 답변을 생성하지 못했습니다.\n자세한 사항은 {contactInfo}로 문의 부탁드립니다."
+            return "죄송합니다, 일시적인 오류로 답변을 생성하지 못했습니다.\n잠시 후 다시 시도해 주세요."
 
     def _extractConversationTopic(self, history: list[dict]) -> Optional[str]:
         """대화 히스토리에서 현재 주제 추출 (컨텍스트 오염 방지)
@@ -1601,6 +1679,7 @@ class RAGGraph:
 
     def answerVerifyNode(self, state: RAGState) -> RAGState:
         """답변 검증 노드: Grounding Gate 기반 문장 단위 근거 검증 + 할루시네이션 탐지"""
+        _start = time.time()
         answer = state.get("answer", "")
         query = state.get("query", "")
         chunks = state.get("retrieved_chunks", [])
@@ -1853,6 +1932,8 @@ class RAGGraph:
 
         verifiedAnswer = re.sub(r'\n{3,}', '\n\n', verifiedAnswer).strip()
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] answerVerify: {_elapsed:.3f}s")
         return {
             **state,
             "verification_passed": passed,
@@ -1870,6 +1951,7 @@ class RAGGraph:
         hotel = state.get("detected_hotel")
 
         # 호텔 정보 조회
+        _start = time.time()
         hotelInfo = self.HOTEL_INFO.get(hotel, {})
         hotelName = hotelInfo.get("name", "")
         hotelPhone = hotelInfo.get("phone", "")
@@ -1915,18 +1997,37 @@ class RAGGraph:
                 "final_answer": fallbackAnswer,
             }
 
-        # 출처 추가
+        # 최종 안전망: 답변에 시스템 오류/raw chunk 패턴이 남아있으면 교체
+        errorPatterns = ["[시스템 오류]", "[참조", "검색된 정보:", "일시적인 오류로 답변을 생성하지 못했습니다"]
+        if any(p in answer for p in errorPatterns):
+            print(f"[안전망] 답변에 오류 패턴 감지, fallback 교체")
+            answer = f"죄송합니다, 일시적인 오류로 답변을 생성하지 못했습니다.\n자세한 사항은 {contactGuide}로 문의 부탁드립니다."
+
+        # 출처 추가 (중복 방지: 답변에 이미 삽입된 URL도 통합)
         sources = state.get("sources", [])
         finalAnswer = answer
+
+        # 답변 본문에 이미 삽입된 "참고 정보" 섹션 제거 (policyFilter에서 통합 관리)
+        if "\n\n참고 정보:" in finalAnswer:
+            # 기존 참고 정보 섹션에서 URL 추출하여 sources에 병합
+            refIdx = finalAnswer.index("\n\n참고 정보:")
+            existingRefSection = finalAnswer[refIdx:]
+            finalAnswer = finalAnswer[:refIdx]
+            # 기존 섹션의 URL 추출
+            existingUrls = re.findall(r'https?://[^\s\n]+', existingRefSection)
+            sources = list(sources) + existingUrls
+
         # 사용된 모든 출처 URL 표시 (중복 제거)
         if sources:
             uniqueSources = list(dict.fromkeys(sources))  # 순서 유지하며 중복 제거
             if len(uniqueSources) == 1:
                 finalAnswer += f"\n\n참고 정보: {uniqueSources[0]}"
             else:
-                sourceList = "\n".join([f"- {url}" for url in uniqueSources])
+                sourceList = "\n".join(uniqueSources)
                 finalAnswer += f"\n\n참고 정보:\n{sourceList}"
 
+        _elapsed = time.time() - _start
+        print(f"[타이밍] policyFilter: {_elapsed:.3f}s")
         return {
             **state,
             "policy_passed": True,
@@ -1938,6 +2039,7 @@ class RAGGraph:
         """로그 노드: 대화 기록 저장"""
         logEntry = {
             "timestamp": datetime.now().isoformat(),
+            "duration_s": round(time.time() - state.get("_pipeline_start", time.time()), 2),
             "query": state["query"],
             "hotel": state.get("detected_hotel"),
             "category": state.get("category"),
@@ -1972,6 +2074,8 @@ class RAGGraph:
             history: 대화 히스토리 (선택)
             sessionCtx: 세션 컨텍스트 객체 (선택, ConversationContext)
         """
+        pipelineStart = time.time()
+
         initialState: RAGState = {
             "query": query,
             "hotel": hotel,
@@ -2007,10 +2111,14 @@ class RAGGraph:
             "policy_reason": "",
             "final_answer": "",
             "log": {},
+            "_pipeline_start": pipelineStart,
         }
 
         # 그래프 실행
         result = self.graph.invoke(initialState)
+
+        pipelineElapsed = time.time() - pipelineStart
+        print(f"[타이밍] 전체 파이프라인: {pipelineElapsed:.1f}s")
 
         # 세션 업데이트 (그래프 실행 후)
         if sessionCtx:

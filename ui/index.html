@@ -173,6 +173,64 @@
       return data;
     }
 
+    // SSE 스트리밍 API 호출
+    async function callAPIStream(hotelId, message, history = [], onToken, onStatus) {
+      const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hotelId, message, history, sessionId: state.sessionId })
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let result = {};
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            switch (data.event) {
+              case 'status':
+                if (onStatus) onStatus(data.message);
+                break;
+              case 'token':
+                if (onToken) onToken(data.text);
+                break;
+              case 'clarification':
+                result = {
+                  answer: data.answer,
+                  needsClarification: true,
+                  clarificationOptions: data.options,
+                  clarificationType: data.type,
+                  originalQuery: data.originalQuery
+                };
+                break;
+              case 'done':
+                result.sources = data.sources;
+                result.score = data.score;
+                if (data.sessionId) state.sessionId = data.sessionId;
+                break;
+              case 'error':
+                throw new Error(data.message);
+            }
+          } catch (e) {
+            if (e.message && e.message.includes('오류가 발생')) throw e;
+          }
+        }
+      }
+      return result;
+    }
+
     // 대화 히스토리 추출 (최근 6개 메시지 = 3턴)
     function getConversationHistory() {
       const relevantMessages = state.messages
@@ -419,13 +477,13 @@
       if (msg.status === 'thinking') {
         const elapsed = thinkingStartTime ? Math.floor((Date.now() - thinkingStartTime) / 1000) : 0;
         return `
-          <div class="flex justify-start message-enter">
+          <div class="flex justify-start message-enter" data-msg-id="${msg.id}">
             <div class="max-w-[85%] sm:max-w-[80%] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
               <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
                 <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...
+                <span class="thinking-status">생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...</span>
               </p>
-              <div class="space-y-2 sm:space-y-3">
+              <div class="markdown-content space-y-2 sm:space-y-3">
                 <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
                 <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-48 sm:w-56"></div>
               </div>
@@ -508,7 +566,7 @@
       }
 
       return `
-        <div class="flex justify-start message-enter">
+        <div class="flex justify-start message-enter" data-msg-id="${msg.id}">
           <div class="max-w-[85%] sm:max-w-[80%] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
             <div class="text-sm sm:text-base markdown-content text-gray-800 dark:text-gray-200">${content}</div>
             ${clarificationButtons}
@@ -532,8 +590,33 @@
       }).join('\n');
     }
 
+    // marked 설정: 줄바꿈 활성화
+    if (typeof marked !== 'undefined') {
+      marked.use({ breaks: true });
+    }
+
+    // 답변 텍스트 포맷팅 (줄바꿈 추가 + 취소선 방지)
+    function formatAnswerText(text) {
+      // ~ → ～ (마크다운 취소선 방지, 전각 물결표 치환)
+      text = text.replace(/~/g, '～');
+      // ■ 앞에 줄바꿈 추가
+      text = text.replace(/([^\n])\s*■\s*/g, '$1\n■ ');
+      // 시간 뒤 "- 항목명" 패턴 줄바꿈 (예: "15:00 - 석식" → 줄바꿈)
+      text = text.replace(/(\d{2}:\d{2})\s+- ([가-힣A-Za-z])/g, '$1\n- $2');
+      // ※ 앞에 줄바꿈 추가
+      text = text.replace(/([^\n])\s*※/g, '$1\n※');
+      // "참고 정보:" 앞에 줄바꿈 추가
+      text = text.replace(/([^\n])\s*(참고\s*정보\s*:?)/g, '$1\n\n$2');
+      // 연속된 URL 사이에 줄바꿈 추가
+      text = text.replace(/(https?:\/\/\S+)\s+(https?:\/\/)/g, '$1\n$2');
+      // 과도한 줄바꿈 정리
+      text = text.replace(/\n{3,}/g, '\n\n');
+      return text.trim();
+    }
+
     function renderMarkdown(text) {
       if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+        text = formatAnswerText(text);
         const html = marked.parse(text);
         return DOMPurify.sanitize(html, { ADD_ATTR: ['target'] }).replace(/<a /g, '<a target="_blank" ');
       }
@@ -610,15 +693,54 @@
       const history = getConversationHistory();
 
       try {
-        const response = await callAPI(state.currentHotel.id, message, history);
+        // 스트리밍 토큰 누적
+        let streamedText = '';
+        let streamStarted = false;
+
+        const onToken = (text) => {
+          streamedText += text;
+          if (!streamStarted) {
+            streamStarted = true;
+            const idx = state.messages.findIndex(m => m.id === thinkingId);
+            if (idx !== -1) {
+              state.messages[idx].status = 'streaming';
+              state.messages[idx].content = streamedText;
+            }
+            render();
+          }
+          // DOM 직접 업데이트 (성능 최적화)
+          const msgBubble = document.querySelector(`[data-msg-id="${thinkingId}"] .markdown-content`);
+          if (msgBubble) {
+            msgBubble.innerHTML = renderMarkdown(deduplicateRefs(streamedText));
+            scrollToBottom();
+          } else {
+            const idx = state.messages.findIndex(m => m.id === thinkingId);
+            if (idx !== -1) state.messages[idx].content = streamedText;
+            render();
+          }
+        };
+
+        const onStatus = (statusMsg) => {
+          const statusEl = document.querySelector(`[data-msg-id="${thinkingId}"] .thinking-status`);
+          if (statusEl) statusEl.textContent = statusMsg;
+        };
+
+        const response = await callAPIStream(
+          state.currentHotel.id, message, history, onToken, onStatus
+        );
+
         const elapsedTime = stopThinkingTimer();
         const timestamp = formatTimestamp(new Date());
 
         const idx = state.messages.findIndex(m => m.id === thinkingId);
         if (idx !== -1) {
+          const finalAnswer = response.needsClarification
+            ? response.answer
+            : (streamedText || response.answer || '응답을 생성할 수 없습니다.');
+
           state.messages[idx] = {
             ...state.messages[idx],
-            content: response.answer,
+            content: finalAnswer,
             status: 'done',
             timestamp: timestamp,
             elapsedTime: elapsedTime,
@@ -628,32 +750,66 @@
             originalQuery: response.originalQuery || null
           };
 
-          // 답변 수신 즉시 TTS 자동 재생 (에러/명확화/STT녹음 중 제외)
+          // TTS 자동 재생
           const sttActive = typeof STTEngine !== 'undefined' && STTEngine.getState() === 'listening';
           if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable()
-              && response.answer && !response.needsClarification && !sttActive) {
-            TTSEngine.play(response.answer, thinkingId);
+              && finalAnswer && !response.needsClarification && !sttActive) {
+            TTSEngine.play(finalAnswer, thinkingId);
           }
         }
-      } catch (error) {
-        console.error('API 에러:', error);
-        const elapsedTime = stopThinkingTimer();
-        const timestamp = formatTimestamp(new Date());
 
-        const idx = state.messages.findIndex(m => m.id === thinkingId);
-        if (idx !== -1) {
-          state.messages[idx] = {
-            ...state.messages[idx],
-            content: '요청에 실패했어요. 다시 시도해 주세요.',
-            status: 'error',
-            timestamp: timestamp,
-            elapsedTime: elapsedTime
-          };
+        state.isSending = false;
+        render();
+
+      } catch (streamError) {
+        console.warn('스트리밍 실패, 폴백:', streamError);
+
+        // 스트리밍 실패 시 기존 callAPI로 폴백
+        try {
+          const response = await callAPI(state.currentHotel.id, message, history);
+          const elapsedTime = stopThinkingTimer();
+          const timestamp = formatTimestamp(new Date());
+
+          const idx = state.messages.findIndex(m => m.id === thinkingId);
+          if (idx !== -1) {
+            state.messages[idx] = {
+              ...state.messages[idx],
+              content: response.answer,
+              status: 'done',
+              timestamp: timestamp,
+              elapsedTime: elapsedTime,
+              needsClarification: response.needsClarification || false,
+              clarificationOptions: response.clarificationOptions || [],
+              clarificationType: response.clarificationType || null,
+              originalQuery: response.originalQuery || null
+            };
+
+            const sttActive = typeof STTEngine !== 'undefined' && STTEngine.getState() === 'listening';
+            if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable()
+                && response.answer && !response.needsClarification && !sttActive) {
+              TTSEngine.play(response.answer, thinkingId);
+            }
+          }
+        } catch (fallbackError) {
+          console.error('API 에러:', fallbackError);
+          const elapsedTime = stopThinkingTimer();
+          const timestamp = formatTimestamp(new Date());
+
+          const idx = state.messages.findIndex(m => m.id === thinkingId);
+          if (idx !== -1) {
+            state.messages[idx] = {
+              ...state.messages[idx],
+              content: '요청에 실패했어요. 다시 시도해 주세요.',
+              status: 'error',
+              timestamp: timestamp,
+              elapsedTime: elapsedTime
+            };
+          }
         }
-      }
 
-      state.isSending = false;
-      render();
+        state.isSending = false;
+        render();
+      }
     }
 
     // ========== 이벤트 위임 (한 번만 등록) ==========

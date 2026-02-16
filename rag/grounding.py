@@ -38,25 +38,25 @@ class GroundingResult:
 class GroundingGate:
     """근거 검증 게이트"""
 
-    # 수치/민감 토큰 패턴 (근거 없이 생성 금지)
+    # 수치/민감 토큰 패턴 (근거 없이 생성 금지) — 사전 컴파일
     SENSITIVE_PATTERNS = [
-        (r'\d[\d,]*\s*원', "가격"),  # 50,000원, 5000원 등
-        (r'\d+\s*%', "할인율"),
-        (r'\d+\s*세', "연령"),
-        (r'\d+\s*인', "인원"),
-        (r'\d+\s*명', "인원"),
-        (r'\d+\s*kg', "무게"),
-        (r'\d{1,2}:\d{2}', "시간"),
-        (r'무료', "무료"),
-        (r'유료', "유료"),
-        (r'할인', "할인"),
+        (re.compile(r'\d[\d,]*\s*원'), "가격"),  # 50,000원, 5000원 등
+        (re.compile(r'\d+\s*%'), "할인율"),
+        (re.compile(r'\d+\s*세'), "연령"),
+        (re.compile(r'\d+\s*인'), "인원"),
+        (re.compile(r'\d+\s*명'), "인원"),
+        (re.compile(r'\d+\s*kg'), "무게"),
+        (re.compile(r'\d{1,2}:\d{2}'), "시간"),
+        (re.compile(r'무료'), "무료"),
+        (re.compile(r'유료'), "유료"),
+        (re.compile(r'할인'), "할인"),
         # 전화번호 패턴 (날조 방지)
-        (r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}', "전화번호"),
+        (re.compile(r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}'), "전화번호"),
         # 날짜/기간 패턴 (날조 방지)
-        (r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일', "날짜"),
-        (r'\d{1,2}월\s*\d{1,2}일', "날짜"),
+        (re.compile(r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일'), "날짜"),
+        (re.compile(r'\d{1,2}월\s*\d{1,2}일'), "날짜"),
         # 층수 패턴
-        (r'\d+\s*층', "층수"),
+        (re.compile(r'\d+\s*층'), "층수"),
     ]
 
     # 부정어-긍정어 대립 쌍 (뉘앙스 역전 감지용)
@@ -69,14 +69,14 @@ class GroundingGate:
         ("제한", "자유"),
     ]
 
-    # 고유명사 패턴 (한글+영문 병기: 할루시네이션 위험 높음)
+    # 고유명사 패턴 (한글+영문 병기: 할루시네이션 위험 높음) — 사전 컴파일
     PROPER_NOUN_PATTERNS = [
         # "그랜드 셰프 (Grand Chef)" 같은 한영 병기 패턴
-        (r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)', "한영병기 시설명"),
+        (re.compile(r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)'), "한영병기 시설명"),
         # "~ 레스토랑", "~ 카페" 등 시설 명칭
-        (r'([가-힣A-Za-z]{2,}(?:\s+[가-힣A-Za-z]+)*)\s+(레스토랑|카페|바(?![가-힣])|라운지|센터|클럽)', "시설명"),
+        (re.compile(r'([가-힣A-Za-z]{2,}(?:\s+[가-힣A-Za-z]+)*)\s+(레스토랑|카페|바(?![가-힣])|라운지|센터|클럽)'), "시설명"),
         # "손종원 셰프", "김철수 대표" 등 인물명
-        (r'([가-힣]{2,4})\s*(셰프|쉐프|대표|오너|총괄|매니저|사장|원장|소믈리에)', "인물명"),
+        (re.compile(r'([가-힣]{2,4})\s*(셰프|쉐프|대표|오너|총괄|매니저|사장|원장|소믈리에)'), "인물명"),
     ]
 
     # 질문 의도 분류 키워드
@@ -100,15 +100,15 @@ class GroundingGate:
     EVIDENCE_THRESHOLD = GROUNDING_THRESHOLD
     NUMERIC_MATCH_REQUIRED = True  # 수치가 있으면 근거에도 반드시 있어야 함
 
-    # 무시할 일반 표현 패턴 (LLM이 추가하는 설명)
+    # 무시할 일반 표현 패턴 (LLM이 추가하는 설명) — 사전 컴파일
     GENERIC_PHRASES = [
-        r'고급스러운 시설',
-        r'다양한 서비스',
-        r'고객님의 취향',
-        r'편안한 휴식',
-        r'최상의 서비스',
-        r'이러한 객실들은',
-        r'각각.*제공하며',
+        re.compile(r'고급스러운 시설'),
+        re.compile(r'다양한 서비스'),
+        re.compile(r'고객님의 취향'),
+        re.compile(r'편안한 휴식'),
+        re.compile(r'최상의 서비스'),
+        re.compile(r'이러한 객실들은'),
+        re.compile(r'각각.*제공하며'),
     ]
 
     def __init__(self):
@@ -151,8 +151,8 @@ class GroundingGate:
     def extractSensitiveTokens(self, text: str) -> list[tuple[str, str]]:
         """민감 토큰(수치/가격/인원 등) 추출"""
         tokens = []
-        for pattern, tokenType in self.SENSITIVE_PATTERNS:
-            matches = re.findall(pattern, text)
+        for compiledPattern, tokenType in self.SENSITIVE_PATTERNS:
+            matches = compiledPattern.findall(text)
             for match in matches:
                 if isinstance(match, tuple):
                     match = match[0]
@@ -339,8 +339,8 @@ class GroundingGate:
 
     def isGenericPhrase(self, text: str) -> bool:
         """일반적인 설명 문구인지 확인"""
-        for pattern in self.GENERIC_PHRASES:
-            if re.search(pattern, text):
+        for compiledPattern in self.GENERIC_PHRASES:
+            if compiledPattern.search(text):
                 return True
         return False
 
@@ -350,9 +350,9 @@ class GroundingGate:
         전화번호 날조는 심각한 할루시네이션이므로 정확 매칭 요구.
         """
         unverified = []
-        # 답변에서 전화번호 추출
-        phonePattern = r'\d{2,4}[-.]?\d{3,4}[-.]?\d{4}'
-        answerPhones = re.findall(phonePattern, answer)
+        # 답변에서 전화번호 추출 (사전 컴파일 패턴 재사용)
+        phoneCompiled = self.SENSITIVE_PATTERNS[10][0]  # 전화번호 패턴
+        answerPhones = phoneCompiled.findall(answer)
 
         if not answerPhones:
             return True, []
@@ -361,7 +361,7 @@ class GroundingGate:
             # 숫자만 추출하여 비교 (구분자 무시)
             phoneDigits = re.sub(r'[^\d]', '', phone)
             # 컨텍스트에서 동일 숫자열 찾기
-            contextPhones = re.findall(phonePattern, context)
+            contextPhones = phoneCompiled.findall(context)
             found = False
             for ctxPhone in contextPhones:
                 ctxDigits = re.sub(r'[^\d]', '', ctxPhone)
@@ -452,8 +452,8 @@ class GroundingGate:
         unverified = []
         contextLower = context.lower()
 
-        for pattern, nounType in self.PROPER_NOUN_PATTERNS:
-            matches = re.finditer(pattern, text)
+        for compiledPattern, nounType in self.PROPER_NOUN_PATTERNS:
+            matches = compiledPattern.finditer(text)
             for match in matches:
                 fullMatch = match.group(0)
                 # 한영 병기인 경우 두 이름 모두 확인

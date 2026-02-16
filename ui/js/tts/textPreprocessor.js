@@ -4,6 +4,32 @@
  */
 const TTSPreprocessor = {
 
+  // 영어→한글 발음 매핑 (메뉴/호텔 용어)
+  _engToKorMap: [
+    [/\bsupplement\b/gi, '추가'],
+    [/\blunch\b/gi, '런치'],
+    [/\bdinner\b/gi, '디너'],
+    [/\bbreakfast\b/gi, '브렉퍼스트'],
+    [/\bbuffet\b/gi, '뷔페'],
+    [/\bbrunch\b/gi, '브런치'],
+    [/\broom\s*service\b/gi, '룸서비스'],
+    [/\bcheck-?in\b/gi, '체크인'],
+    [/\bcheck-?out\b/gi, '체크아웃'],
+    [/\bsuite\b/gi, '스위트'],
+    [/\bdeluxe\b/gi, '디럭스'],
+    [/\bpremier\b/gi, '프리미어'],
+    [/\bsuperior\b/gi, '슈페리어'],
+    [/\bstandard\b/gi, '스탠다드'],
+    [/\bamenity\b/gi, '어메니티'],
+    [/\bamenities\b/gi, '어메니티'],
+    [/\bconcierge\b/gi, '컨시어지'],
+    [/\blounge\b/gi, '라운지'],
+    [/\bspa\b/gi, '스파'],
+    [/\bpool\b/gi, '풀'],
+    [/\bfitness\b/gi, '피트니스'],
+    [/\bvalet\b/gi, '발렛'],
+  ],
+
   // 한국어 숫자 읽기 매핑
   _digitMap: { '0': '영', '1': '일', '2': '이', '3': '삼', '4': '사',
                '5': '오', '6': '육', '7': '칠', '8': '팔', '9': '구' },
@@ -42,22 +68,36 @@ const TTSPreprocessor = {
     result = result.replace(/^[-*•]\s+/gm, '');
     result = result.replace(/^\d+\.\s+/gm, '');
 
-    // 6. 한국어 숫자/시간 변환
+    // 6. 영어→한글 발음 변환 (TTS 한국어 읽기)
+    result = this._convertEnglishToKorean(result);
+
+    // 7. 한국어 숫자/시간 변환
     result = this._convertTime(result);
     result = this._convertPhone(result);
     result = this._convertPrice(result);
 
-    // 7. 특수 기호 정리
+    // 8. 특수 기호 정리
     result = result.replace(/[|─═┌┐└┘├┤┬┴┼]/g, '');
     result = result.replace(/[><]/g, '');
 
-    // 8. 연속 공백/줄바꿈 정리
+    // 9. 연속 공백/줄바꿈 정리
     result = result.replace(/\n{2,}/g, '. ');
     result = result.replace(/\n/g, '. ');
     result = result.replace(/\s{2,}/g, ' ');
     result = result.replace(/\.\s*\./g, '.');
 
     return result.trim();
+  },
+
+  /**
+   * 영어→한글 발음 변환 (메뉴/호텔 용어)
+   */
+  _convertEnglishToKorean(text) {
+    let result = text;
+    for (const [pattern, korean] of this._engToKorMap) {
+      result = result.replace(pattern, korean);
+    }
+    return result;
   },
 
   /**

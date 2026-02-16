@@ -8,8 +8,10 @@ Vector DB 인덱싱 모듈
 import json
 import re
 import pickle
+import time
 from pathlib import Path
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 import chromadb
 from chromadb.config import Settings
@@ -303,7 +305,7 @@ class Indexer:
         vectorWeight: float = 0.7,
         bm25Weight: float = 0.3
     ) -> list[dict]:
-        """하이브리드 검색 (Vector + BM25)
+        """하이브리드 검색 (Vector + BM25 병렬 실행)
 
         Vector 검색을 기본으로 하고, BM25로 키워드 매칭 보완.
         최종 점수는 Vector 점수 기준으로 유지하여 임계값 통과.
@@ -313,14 +315,28 @@ class Indexer:
             vectorWeight: 벡터 검색 가중치 (기본 0.7)
             bm25Weight: BM25 검색 가중치 (기본 0.3)
         """
-        # 벡터 검색
-        vectorResults = self.searchVector(query, hotel, category, topK=topK * 2)
+        searchStart = time.time()
 
         if not hybrid or not self.bm25Index:
+            vectorResults = self.searchVector(query, hotel, category, topK=topK * 2)
+            elapsed = time.time() - searchStart
+            print(f"[검색] 벡터 단독 검색 완료 ({elapsed * 1000:.0f}ms)")
             return vectorResults[:topK]
 
-        # BM25 검색
-        bm25Results = self.searchBM25(query, hotel, topK=topK * 2)
+        # Vector + BM25 병렬 실행
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            vectorFuture = executor.submit(self.searchVector, query, hotel, category, topK * 2)
+            bm25Future = executor.submit(self.searchBM25, query, hotel, topK * 2)
+            try:
+                vectorResults = vectorFuture.result()
+            except Exception as e:
+                print(f"[검색] Vector 검색 실패, BM25만 사용: {e}")
+                vectorResults = []
+            try:
+                bm25Results = bm25Future.result()
+            except Exception as e:
+                print(f"[검색] BM25 검색 실패, Vector만 사용: {e}")
+                bm25Results = []
 
         # 결과 수집
         allResults = {}
@@ -379,6 +395,8 @@ class Indexer:
             result["bm25_score"] = data["bm25_score"]
             finalResults.append(result)
 
+        elapsed = time.time() - searchStart
+        print(f"[검색] 하이브리드 검색 완료 ({elapsed * 1000:.0f}ms, {len(finalResults)}개 결과)")
         return finalResults
 
     def getStats(self) -> dict:
