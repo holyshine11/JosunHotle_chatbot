@@ -41,30 +41,35 @@ python monitor/dashboard.py --days 7
 Crawler → Cleaner → Chunker → Indexer(Chroma + BM25) → RAG API(LangGraph 9노드) → FastAPI → UI
 ```
 
-### RAG 플로우 (9개 노드) - `rag/graph.py`
+### RAG 플로우 (9개 노드)
 
 ```
 queryRewriteNode → preprocessNode → clarificationCheckNode → retrieveNode
 → evidenceGateNode → answerComposeNode → answerVerifyNode → policyFilterNode → logNode
 ```
 
-| 노드 | 역할 |
-|------|------|
-| `queryRewriteNode` | 대화 맥락 반영 쿼리 재작성, 주제 전환 감지 (11개 토픽 그룹) |
-| `preprocessNode` | 입력 정규화, 언어/호텔/카테고리 감지, `VALID_QUERY_KEYWORDS` 검증 |
-| `clarificationCheckNode` | 모호한 질문 명확화 (맥락 인식, 주체 감지) |
-| `retrieveNode` | Vector(70%) + BM25(30%) 하이브리드 검색 + Cross-Encoder 리랭킹 |
-| `evidenceGateNode` | 근거 검증 (`EVIDENCE_THRESHOLD: 0.65`), topScore = max(scores) |
-| `answerComposeNode` | LLM 답변 생성 (Temperature 0.1), `[REF:N]` 참조 추적 |
-| `answerVerifyNode` | 다층 검증: Grounding Gate + 할루시네이션 + 교통편 날조 + 고유명사 + 카테고리 오염 + Fallback 직접 추출 |
-| `policyFilterNode` | 금지 주제/개인정보 필터링 |
-| `logNode` | JSONL 로깅 → `data/logs/` |
+| 노드 | 파일 | 역할 |
+|------|------|------|
+| `queryRewriteNode` | `nodes_preprocess.py` | 대화 맥락 반영 쿼리 재작성, 주제 전환 감지 (11개 토픽 그룹) |
+| `preprocessNode` | `nodes_preprocess.py` | 입력 정규화, 언어/호텔/카테고리 감지, `VALID_QUERY_KEYWORDS` 검증 |
+| `clarificationCheckNode` | `nodes_preprocess.py` | 모호한 질문 명확화 (맥락 인식, 주체 감지) |
+| `retrieveNode` | `nodes_retrieve.py` | Vector(70%) + BM25(30%) 하이브리드 검색 + Cross-Encoder 리랭킹 |
+| `evidenceGateNode` | `nodes_retrieve.py` | 근거 검증 (`EVIDENCE_THRESHOLD: 0.65`), topScore = max(scores) |
+| `answerComposeNode` | `nodes_compose.py` | LLM 답변 생성 (Temperature 0.1), `[REF:N]` 참조 추적 |
+| `answerVerifyNode` | `nodes_verify.py` | 다층 검증: Grounding Gate + 할루시네이션 + 교통편 날조 + 고유명사 + 카테고리 오염 + Fallback 직접 추출 |
+| `policyFilterNode` | `nodes_verify.py` | 금지 주제/개인정보 필터링 |
+| `logNode` | `nodes_verify.py` | JSONL 로깅 → `data/logs/` |
 
 ### 핵심 모듈
 
 | 파일 | 역할 |
 |------|------|
-| `rag/graph.py` | LangGraph 9노드 파이프라인, RAGGraph 클래스, chat() 진입점 |
+| `rag/graph.py` | LangGraph 오케스트레이터, RAGGraph 클래스, chat() 진입점 |
+| `rag/state.py` | RAGState TypedDict (파이프라인 상태 정의) |
+| `rag/nodes_preprocess.py` | 전처리 노드 (쿼리 재작성, 정규화, 명확화) |
+| `rag/nodes_retrieve.py` | 검색 노드 (하이브리드 검색, 리랭킹, 근거 게이트) |
+| `rag/nodes_compose.py` | 답변 생성 노드 (LLM 답변, 청크 병합/교차참조) |
+| `rag/nodes_verify.py` | 검증 노드 (Grounding, 정책 필터, 로깅) |
 | `rag/constants.py` | 모든 상수/설정 (키워드 586개, 호텔 매핑, 카테고리, 동의어 등) |
 | `rag/grounding.py` | GroundingGate (문장 단위 근거 검증), CategoryConsistencyChecker |
 | `rag/reranker.py` | BAAI/bge-reranker-v2-m3, RELATIVE_THRESHOLD=0.35, 키워드 보호 |
@@ -120,7 +125,7 @@ GET  /          → ui/index.html (정적 파일 서빙)
 - 주석: 한글
 - 커밋 메시지: 영문
 
-## 현재 상태 (2026-02-09)
+## 현재 상태 (2026-02-16)
 
 - **정확도**: 100% (50/50 골든 QA) + 멀티턴 100% (22/22)
 - **할루시네이션율**: 0.0%

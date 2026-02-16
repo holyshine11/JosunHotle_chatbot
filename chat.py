@@ -13,7 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from rag.graph import createRAGGraph, RAGGraph
+from rag.graph import createRAGGraph
+from rag.constants import HOTEL_KEYWORDS
 
 
 # 호텔 목록
@@ -55,7 +56,7 @@ def selectHotel() -> str:
 def detectHotelFromQuery(query: str) -> str:
     """질문에서 호텔 키워드 감지"""
     queryLower = query.lower()
-    for hotelKey, keywords in RAGGraph.HOTEL_KEYWORDS.items():
+    for hotelKey, keywords in HOTEL_KEYWORDS.items():
         for keyword in keywords:
             if keyword.lower() in queryLower:
                 return hotelKey
