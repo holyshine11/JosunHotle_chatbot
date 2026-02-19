@@ -24,6 +24,13 @@ class Reranker:
     MIN_KEEP = 2  # 최소 유지 청크 수
     # 최고 점수 대비 상대 임계값 (최고 점수의 35% 미만은 제거)
     RELATIVE_THRESHOLD = 0.35
+    # 조건부 스킵: 벡터 검색 top score가 이 값 이상이면 리랭킹 생략
+    SKIP_THRESHOLD = 0.90
+    # 절대 raw score 임계값: 최고 점수가 이 값 미만이면 전체 결과 "저품질" 판정
+    # (모든 결과가 쿼리와 무관할 때 min-max 정규화가 품질을 은폐하는 것을 방지)
+    ABSOLUTE_RAW_SCORE_FLOOR = -5.0
+    # 추론 최적화
+    MAX_LENGTH = 512  # 토크나이저 최대 길이 (원본 유지, MPS 가속으로 충분히 빠름)
 
     def __init__(self, modelName: str = None, device: str = "cpu"):
         self.modelName = modelName or self.DEFAULT_MODEL
@@ -52,6 +59,16 @@ class Reranker:
                 self.modelName
             )
             self._model.eval()
+
+            # MPS(Metal GPU) 가속 시도
+            try:
+                import torch
+                if torch.backends.mps.is_available():
+                    self._model = self._model.to("mps")
+                    self.device = "mps"
+                    print(f"[리랭커] MPS(Metal GPU) 가속 활성화")
+            except Exception as e:
+                print(f"[리랭커] MPS 불가, CPU 유지: {e}")
 
             elapsed = time.time() - startTime
             print(f"[리랭커] 로딩 완료 ({elapsed:.1f}초)")
@@ -119,8 +136,12 @@ class Reranker:
                         padding=True,
                         truncation=True,
                         return_tensors="pt",
-                        max_length=512
+                        max_length=self.MAX_LENGTH
                     )
+
+                    # MPS/GPU 사용 시 입력 텐서 디바이스 이동
+                    if self.device != "cpu":
+                        inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
                     # 배치 추론 (한 번에 모든 점수 계산)
                     logits = self._model(**inputs, return_dict=True).logits
@@ -133,8 +154,8 @@ class Reranker:
                         cacheKey = self._generateChunkKey(query, text)
                         self._scoreCache[cacheKey] = score
 
-                        # 캐시 크기 제한 (100개 초과 시 오래된 항목 제거)
-                        if len(self._scoreCache) > 100:
+                        # 캐시 크기 제한 (500개 초과 시 오래된 항목 제거)
+                        if len(self._scoreCache) > 500:
                             # 가장 오래된 항목 제거 (FIFO)
                             oldestKey = next(iter(self._scoreCache))
                             del self._scoreCache[oldestKey]
@@ -147,6 +168,12 @@ class Reranker:
         except Exception as e:
             print(f"[리랭커] 점수 계산 실패: {e}")
             return chunks[:topK]
+
+        # 절대 품질 판정: 최고 raw score가 임계값 미만이면 전체 "저품질"
+        bestRawScore = max(rawScores)
+        isLowQuality = bestRawScore < self.ABSOLUTE_RAW_SCORE_FLOOR
+        if isLowQuality:
+            print(f"[리랭커] 절대 품질 미달: 최고 raw={bestRawScore:.2f} < floor={self.ABSOLUTE_RAW_SCORE_FLOOR}")
 
         # min-max 정규화 (0~1 범위)
         scores = np.array(rawScores)
@@ -165,6 +192,7 @@ class Reranker:
                 "rerank_score": float(normalizedScores[i]),
                 "rerank_raw": float(rawScores[i]),
                 "original_score": chunk.get("score", 0),
+                "_rerank_quality": "poor" if isLowQuality else "ok",
             })
 
         # 리랭크 점수 기준 정렬

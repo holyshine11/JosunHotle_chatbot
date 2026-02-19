@@ -29,7 +29,10 @@ def answerComposeNode(state: RAGState) -> dict:
         }
 
     # === Phase 1: 청크 중복 제거 및 정보 병합 ===
-    mergedChunks = _mergeChunkInfo(chunks[:5])
+    # 단순 싱글턴 질문만 상위 3개 (멀티턴은 맥락 유지를 위해 5개)
+    history = state.get("history", [])
+    maxChunks = 3 if len(query) < 20 and not history else 5
+    mergedChunks = _mergeChunkInfo(chunks[:maxChunks])
 
     # 컨텍스트 구성 + 출처 수집
     contextParts = []
@@ -69,6 +72,19 @@ def answerComposeNode(state: RAGState) -> dict:
             "sources": [src["url"] for src in sources],
         }
 
+    # === 고점수 FAQ 직접 추출 (LLM 스킵으로 10~20초 절약) ===
+    topScore = state.get("top_score", 0)
+    directExtractResult = _tryDirectExtraction(query, chunks, topScore, hotel)
+    if directExtractResult:
+        directAnswer, directSources = directExtractResult
+        _elapsed = time.time() - _start
+        print(f"[타이밍] answerCompose: {_elapsed:.3f}s (직접 추출, LLM 생략)")
+        return {
+            **state,
+            "answer": directAnswer,
+            "sources": directSources,
+        }
+
     # LLM 사용 여부에 따라 분기
     usedRefs = []
     llmFailed = state.get("llm_failed", False)
@@ -76,7 +92,9 @@ def answerComposeNode(state: RAGState) -> dict:
         print(f"[answerCompose] queryRewrite LLM 실패 감지 → LLM 건너뛰고 chunk 직접 추출")
 
     if LLM_ENABLED and not llmFailed:
-        answer = _generateWithLLM(query, context, hotel)
+        # 동적 maxTokens: 짧은 단순 질문 → 256, 복합 질문 → 512
+        dynamicMaxTokens = 200 if len(query) < 15 else 256 if len(mergedChunks) <= 2 else 350
+        answer = _generateWithLLM(query, context, hotel, maxTokens=dynamicMaxTokens)
 
         # LLM 실패 감지 → top chunk 직접 추출 fallback
         llmFailed = "일시적인 오류로 답변을 생성하지 못했습니다" in answer
@@ -86,6 +104,10 @@ def answerComposeNode(state: RAGState) -> dict:
                 chunkText = chunk.get("text", "")
                 extracted = answerVerifier.extractDirectAnswer(chunkText, query)
                 if extracted and len(extracted) >= 10:
+                    # raw dump 검증: 원시 청크 데이터가 아닌지 확인
+                    if answerVerifier.isRawDump(extracted):
+                        print(f"[LLM 실패 Fallback] raw dump 감지 → 스킵: {extracted[:60]}...")
+                        continue
                     chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
                     answer = extracted
                     if chunkUrl:
@@ -111,13 +133,9 @@ def answerComposeNode(state: RAGState) -> dict:
                 answer = extracted
                 break
         if not answer:
-            topChunk = chunks[0]
-            answer = topChunk["text"]
-            if "A:" in answer:
-                answer = answer.split("A:")[-1].strip()
-            hotelName = topChunk["metadata"].get("hotel_name", "")
-            if hotelName:
-                answer = f"[{hotelName}] {answer}"
+            # raw chunk를 그대로 출력하지 않고 안전한 거부 응답 반환
+            print(f"[answerCompose] 직접 추출 실패 → raw dump 대신 거부 응답")
+            answer = "죄송합니다, 해당 내용에 대한 정확한 정보를 현재 자료에서 확인하기 어렵습니다."
         usedRefs = [1]
 
     # 사용된 참조의 URL만 필터링
@@ -144,6 +162,86 @@ def answerComposeNode(state: RAGState) -> dict:
 
 
 # === 헬퍼 함수 ===
+
+def _tryDirectExtraction(query: str, chunks: list, topScore: float,
+                          hotel: str = None) -> Optional[tuple[str, list]]:
+    """고점수 FAQ 직접 추출: LLM 호출 없이 chunk에서 바로 답변 추출
+
+    FAQ 형식(Q:/A:)은 정답이 명확하므로 score >= 0.72 이상이면 직접 추출.
+    질문 키워드가 Q: 부분과 매칭되는지 추가 검증.
+
+    Returns:
+        (answer, sources) 또는 None (직접 추출 불가)
+    """
+    FAQ_THRESHOLD = 0.72  # FAQ 형식은 구조화되어 있으므로 낮은 임계값 허용
+    # 리랭커가 고신뢰(rerank_score>=0.8) 확인 시 임계값 완화 (벡터 점수만으로는 부족한 경우)
+    rerankScore = chunks[0].get("rerank_score", 0) if chunks else 0
+    effectiveThreshold = 0.60 if rerankScore >= 0.8 else FAQ_THRESHOLD
+    if topScore < effectiveThreshold or not chunks:
+        return None
+
+    topChunk = chunks[0]
+    text = topChunk.get("text", "")
+    url = topChunk.get("metadata", {}).get("url", "")
+
+    # FAQ 형식만 허용: "Q: ... A: ..." 패턴
+    if "Q:" not in text or "A:" not in text:
+        return None
+
+    qPart = text.split("A:")[0].strip()  # Q: 부분
+    aPart = text.split("A:")[-1].strip()  # A: 부분
+
+    # A: 부분이 충분히 길어야 함
+    if len(aPart) < 15:
+        return None
+
+    # 질문 키워드가 Q: 부분에 포함되는지 검증 (오매칭 방지)
+    queryKeywords = set(re.findall(r'[가-힣]{2,}', query.lower()))
+    # 기능어/일반어 제거
+    queryKeywords -= {"알려줘", "알려주세요", "알려", "어떻게", "언제", "얼마",
+                      "무엇", "호텔", "안내", "정보", "문의"}
+    qPartLower = qPart.lower()
+
+    # 시설 범주 키워드 (의도 매칭에서 제외 — 너무 범용적)
+    FACILITY_GENERICS = {"레스토랑", "식당", "다이닝", "카페", "라운지", "수영장",
+                         "피트니스", "스파", "객실", "시설"}
+
+    # 동의어 확장 매칭 (다이닝↔dinner, 조식↔breakfast 등)
+    SYNONYM_PAIRS = {
+        "다이닝": ["dinner", "dining", "레스토랑", "식당"],
+        "조식": ["breakfast", "아침", "뷔페", "모닝"],
+        "수영장": ["pool", "swimming"],
+        "피트니스": ["fitness", "gym", "헬스"],
+        "스파": ["spa", "마사지"],
+        "체크인": ["check-in", "입실"],
+        "체크아웃": ["check-out", "퇴실"],
+    }
+    expandedKeywords = set(queryKeywords)
+    for kw in queryKeywords:
+        if kw in SYNONYM_PAIRS:
+            expandedKeywords.update(SYNONYM_PAIRS[kw])
+
+    matchCount = sum(1 for kw in expandedKeywords if kw in qPartLower)
+    if matchCount < 1:
+        return None  # 질문과 FAQ가 매칭되지 않음
+
+    # 핵심 의도 키워드 검증: 시설 범주를 제외한 주제 키워드가 Q:에 있어야 함
+    # 예: "레스토랑 운영시간" → 주제="운영", "시간" / "레스토랑 콜키지" → 주제="콜키지"
+    topicKeywords = queryKeywords - FACILITY_GENERICS
+    if topicKeywords:
+        topicMatchCount = sum(1 for kw in topicKeywords if kw in qPartLower)
+        if topicMatchCount == 0:
+            print(f"[직접 추출 거부] 주제 불일치: 쿼리 의도={topicKeywords}, FAQ Q='{qPart[:50]}...'")
+            return None  # 핵심 의도 키워드가 FAQ에 없음 → 주제 불일치
+
+    # 첫 문장이 너무 짧으면 (단어만) LLM에 맡김
+    firstSentence = re.split(r'[.\n]', aPart)[0].strip()
+    if len(firstSentence) < 8:
+        return None
+
+    sources = [url] if url else []
+    print(f"[직접 추출] FAQ 형식, score={topScore:.3f}, Q매칭={matchCount}/{len(queryKeywords)}, 답변 길이={len(aPart)}")
+    return aPart, sources
 
 def _mergeChunkInfo(chunks: list) -> list:
     """복수 청크의 중복 제거 및 정보 병합"""
@@ -374,7 +472,7 @@ def _checkContextSufficiency(query: str, chunks: list, hotel: str = None) -> Opt
     return f"죄송합니다, 해당 내용에 대한 구체적인 정보를 현재 자료에서 확인하기 어렵습니다.\n자세한 사항은 {contactInfo}로 문의 부탁드립니다."
 
 
-def _generateWithLLM(query: str, context: str, hotel: str = None) -> str:
+def _generateWithLLM(query: str, context: str, hotel: str = None, maxTokens: int = 512) -> str:
     """Ollama LLM으로 답변 생성"""
     hotelInfo = HOTEL_INFO.get(hotel, {})
     hotelName = hotelInfo.get("name", "")
@@ -389,58 +487,10 @@ def _generateWithLLM(query: str, context: str, hotel: str = None) -> str:
 - 다른 호텔 정보를 섞지 마세요
 - 문의 안내 시: {contactInfo}"""
 
-    systemPrompt = f"""당신은 조선호텔앤리조트의 프리미엄 AI 컨시어지입니다. 하이엔드 고객을 응대합니다.
-{currentHotelNotice}
+    systemPrompt = f"""조선호텔 AI 컨시어지. 존댓말 응대.{currentHotelNotice}
 
-[핵심 원칙]
-1. 컨텍스트에 있는 정보만 사용
-2. 정보가 없으면: "정확한 정보 확인을 위해 {contactInfo}로 문의 부탁드립니다"
-3. 가격, 시간, 전화번호는 정확히 인용
-4. 추측 금지 ("약", "대략", "아마" 사용 금지)
-5. 여러 참조에 흩어진 관련 정보를 교차 참조하여 통합된 답변 작성
-6. URL에 담긴 상세 정보(메뉴, 가격, 운영시간 등)가 있으면 핵심 내용을 답변에 포함
-
-[고유명사/시설명 규칙 - 최우선]
-- 컨텍스트에 있는 정보는 적극 활용하여 답변하세요
-- 컨텍스트에 없는 시설명/레스토랑명을 새로 만들어내지 마세요 (예: 가공의 레스토랑명)
-- 컨텍스트에 부분적 정보만 있으면 그 부분만 답변하고, 없는 부분은 문의 안내
-
-[답변 형식 - 매우 중요]
-- 반드시 완성된 문장으로 답변 (단어만 나열 금지!)
-- 존댓말 (~입니다, ~드립니다, ~있습니다)
-- 질문에 직접 답변하는 첫 문장 필수 (예: "가장 가까운 역은 역삼역입니다.")
-- 추가 정보가 있으면 불릿포인트(-) 사용
-- 마지막에 정보 나열 후 자연스럽게 종료
-
-[답변 예시]
-질문: "가까운 역 알려줘"
-좋은 답변: "호텔에서 가장 가까운 역은 역삼역이며, 도보 약 5분 거리에 위치해 있습니다."
-나쁜 답변: "역삼역" (단어만 던지면 안됨!)
-
-질문: "조식 시간 알려줘"
-좋은 답변: "조식은 오전 7시부터 10시 30분까지 운영됩니다."
-나쁜 답변: "07:00 - 10:30" (시간만 던지면 안됨!)
-
-질문: "레스토랑 점심 정보 알려줘" (컨텍스트에 구체적 레스토랑 정보 없을 때)
-좋은 답변: "죄송합니다, 해당 레스토랑의 점심 운영에 대한 구체적인 정보를 찾을 수 없습니다. 정확한 정보 확인을 위해 {contactInfo}로 문의 부탁드립니다."
-나쁜 답변: "그랜드 셰프 레스토랑에서 오전 12시부터..." (컨텍스트에 없는 이름/시간 날조!)
-
-[정보 조합 금지]
-- 질문에서 언급되지 않은 주제의 정보는 절대 답변에 포함하지 마세요
-- 컨텍스트에 해당 정보가 없으면: "해당 정보를 찾을 수 없습니다. {contactInfo}로 문의 부탁드립니다."
-
-[절대 금지]
-- "궁금하신가요?" 금지
-- "더 필요하신 것이 있으신가요?" 금지
-- 답변 끝에 질문 형태 문장 금지
-- 단어/숫자만 던지는 불친절한 답변 금지
-- 컨텍스트에 없는 시설명/레스토랑명/브랜드명 창작 금지
-- 컨텍스트에 없는 운영시간/가격 창작 금지
-- 참고 정보에 없는 인물명(셰프, 대표, 오너 등) 언급 금지
-- 지하철 노선(N호선), 버스 번호, 교통 경로 정보를 절대 창작하지 마세요
-- 교통편(택시 요금, 소요 시간, 환승 경로) 정보는 반드시 컨텍스트에 있는 내용만 답변하세요
-- 출발지별 경로 정보가 컨텍스트에 없으면 "정확한 교통 정보를 찾을 수 없습니다"라고 답변하세요
-- 질문 주제와 무관한 정보를 답변에 포함하지 마세요 (예: 객실 질문에 교통편 정보 혼합 금지)"""
+[원칙] 컨텍스트 정보만 사용. 없으면 "{contactInfo}로 문의 부탁드립니다". 가격/시간/번호 정확 인용, 추측("약","대략","아마") 금지. 없는 시설명/교통편 창작 금지. 무관한 정보 포함 금지.
+[형식] 완성 문장, 첫 문장에 직접 답변, 추가정보는 불릿(-), 답변 끝 질문 금지."""
 
     userPrompt = f"""[참고 정보]
 {context}
@@ -448,20 +498,8 @@ def _generateWithLLM(query: str, context: str, hotel: str = None) -> str:
 [질문]
 {query}
 
-[지시사항]
-1. 반드시 완성된 문장으로 정중하게 답변하세요
-2. 단어나 숫자만 던지지 마세요 (예: "역삼역" X → "가장 가까운 역은 역삼역입니다" O)
-3. 참고 정보만 사용하세요. 참고 정보에 없는 내용은 절대 추가하지 마세요
-4. 특히 시설명, 레스토랑명, 프로그램명은 참고 정보에 명시된 것만 사용하세요
-5. 참고 정보에 구체적 답변이 없으면: "해당 정보를 찾을 수 없습니다"라고 솔직히 답변하세요
-6. "궁금하신가요?" 같은 추가 질문은 절대 하지 마세요
-7. 여러 참조에 관련 정보가 분산되어 있으면 교차 참조하여 하나의 통합된 답변으로 조합하세요
-8. URL 상세 정보(메뉴, 가격, 시간 등)가 있으면 단순 URL 안내 대신 핵심 내용을 답변에 포함하세요
-9. 답변 마지막에 반드시 사용한 참조 번호를 표시하세요. 형식: [REF:1,3] (쉼표로 구분)
-
-[답변 형식 예시]
-조식은 오전 7시부터 10시까지 운영됩니다. [REF:2]
-체크인은 15시, 체크아웃은 11시입니다. [REF:1,3]"""
+참고 정보만 사용하여 완성된 문장으로 답변하세요. 없는 정보는 창작하지 말고 문의 안내하세요.
+답변 마지막에 사용한 참조 번호 표시: [REF:1,3]"""
 
     try:
         try:
@@ -469,7 +507,8 @@ def _generateWithLLM(query: str, context: str, hotel: str = None) -> str:
                 prompt=userPrompt,
                 system=systemPrompt,
                 temperature=0.0,
-                maxTokens=512
+                maxTokens=maxTokens,
+                numCtx=2048  # 기본 4096의 절반, KV캐시 절감
             ).strip()
         except TypeError:
             answer = callLLM(

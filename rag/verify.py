@@ -60,6 +60,24 @@ class AnswerVerifier:
         (re.compile(r'정보가\s*없습니다.*문의', re.IGNORECASE | re.MULTILINE), "잘못된 안내"),
     ]
 
+    # 카테고리별 확장 키워드 (관련성 검증 + Fallback 주제 검증 공용)
+    CATEGORY_KEYWORD_MAP = {
+        "반려동물": ["반려", "pet", "펫", "강아지", "dog", "애견", "소형견", "반려견", "동물", "salon", "패키지", "불가", "동반"],
+        "주차": ["주차", "parking", "발렛", "valet", "파킹", "차량", "주차장"],
+        "수영장": ["수영", "pool", "풀", "swimming", "인피니티", "워터"],
+        "조식": ["조식", "breakfast", "아침", "뷔페", "dining", "식사", "레스토랑"],
+        "멤버십": ["멤버십", "membership", "회원", "등급", "포인트", "적립", "리워드", "reward"],
+        "스파": ["스파", "spa", "마사지", "massage", "트리트먼트", "웰니스"],
+        "피트니스": ["피트니스", "fitness", "gym", "헬스", "운동", "헬스장"],
+        "사우나": ["사우나", "sauna", "찜질", "목욕", "탕"],
+        "웨딩": ["웨딩", "wedding", "결혼", "연회", "예식", "신부", "신랑", "피로연"],
+        "다이닝": ["다이닝", "dining", "레스토랑", "restaurant", "식당", "런치", "디너", "코스"],
+        "객실": ["객실", "room", "스위트", "suite", "디럭스", "deluxe", "트윈", "더블", "킹"],
+        "체크인": ["체크인", "check-in", "checkin", "체크아웃", "check-out", "checkout", "입실", "퇴실"],
+        "패키지": ["패키지", "package", "프로모션", "상품", "숙박권"],
+        "이벤트": ["이벤트", "event", "행사", "프로모션", "할인", "특가"],
+    }
+
     # 사전 컴파일 정규식 — checkTransportationHallucination
     _TRANSPORT_PATTERNS = [
         (re.compile(r'\d+호선'), "지하철 노선"),
@@ -68,6 +86,25 @@ class AnswerVerifier:
         (re.compile(r'[가-힣]+역에서\s*[가-힣]+역'), "지하철 경로"),
         (re.compile(r'환승|갈아타'), "환승 안내"),
     ]
+
+    # 네비게이션/UI 요소 패턴 (raw dump 감지용)
+    _NAV_ELEMENTS = [
+        "매장 이미지", "이전 다음", "자세히보기", "자세히 보기",
+        "바로가기", "바로 가기", "더보기", "더 보기", "목록으로",
+        "닫기", "열기", "펼치기", "접기", "공유하기",
+        "예약하기", "예약 바로가기", "온라인 예약",
+        "상단으로", "맨위로", "TOP",
+        "이전 슬라이드", "다음 슬라이드", "슬라이드",
+        "탭 메뉴", "서브 메뉴", "GNB", "LNB",
+    ]
+    _RE_NAV_ELEMENTS = re.compile(
+        '|'.join(re.escape(el) for el in _NAV_ELEMENTS),
+        re.IGNORECASE
+    )
+    # 종결어미 패턴 (문장 완결성 검사용)
+    _RE_SENTENCE_ENDINGS = re.compile(r'(다|요|죠|세요|습니다|입니다|됩니다|합니다|드립니다|주세요|됩니까|바랍니다|까요)[.!?\s]')
+    # 과도한 영문 대문자 블록
+    _RE_UPPERCASE_BLOCK = re.compile(r'[A-Z]{10,}')
 
     def __init__(self):
         self.knownNames = self._loadKnownNames()
@@ -98,24 +135,52 @@ class AnswerVerifier:
         except (FileNotFoundError, json.JSONDecodeError):
             return [r'궁금하신가요\??', r'도움이?\s*되셨나요\??']
 
-    def extractQueryKeywords(self, query: str) -> list[str]:
-        """질문에서 핵심 키워드 추출"""
-        petKeywords = ["강아지", "반려견", "pet", "펫", "반려동물", "애견", "고양이", "댕댕이"]
-        parkingKeywords = ["주차", "parking", "발렛", "valet", "파킹"]
-        poolKeywords = ["수영장", "pool", "풀", "swimming"]
-        breakfastKeywords = ["조식", "breakfast", "아침", "뷔페", "아침식사"]
+    def isRawDump(self, text: str) -> bool:
+        """원시 청크 덤프 여부 감지
 
+        네비게이션/UI 요소, 문장 미완결, 과도한 대문자 블록 등으로 판별.
+        """
+        if not text or len(text) < 20:
+            return False
+
+        # 1) 네비게이션 요소 2개 이상 동시 출현
+        navMatches = self._RE_NAV_ELEMENTS.findall(text)
+        if len(navMatches) >= 2:
+            print(f"[isRawDump] 네비게이션 요소 {len(navMatches)}개 감지: {navMatches[:3]}")
+            return True
+
+        # 2) 문장 완결성 검사: 한글 30자 이상인데 종결어미 0개이고 불릿/FAQ 형식도 아님
+        koreanChars = len(re.findall(r'[가-힣]', text))
+        hasSentenceEnding = bool(self._RE_SENTENCE_ENDINGS.search(text))
+        isBulletFormat = bool(re.search(r'[-•]\s*[가-힣]', text))
+        isFaqFormat = "Q:" in text or "A:" in text
+        if koreanChars >= 30 and not hasSentenceEnding and not isBulletFormat and not isFaqFormat:
+            print(f"[isRawDump] 문장 미완결: 한글 {koreanChars}자, 종결어미 없음")
+            return True
+
+        # 3) 과도한 영문 대문자 블록 (10자 이상 연속)
+        if self._RE_UPPERCASE_BLOCK.search(text):
+            print(f"[isRawDump] 과도한 영문 대문자 블록 감지")
+            return True
+
+        return False
+
+    def _stripNavElements(self, text: str) -> str:
+        """텍스트에서 네비게이션/UI 요소 제거"""
+        cleaned = self._RE_NAV_ELEMENTS.sub('', text)
+        # 정리: 빈 줄 축소, 양쪽 공백 제거
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        cleaned = re.sub(r'[ \t]+\n', '\n', cleaned)
+        return cleaned.strip()
+
+    def extractQueryKeywords(self, query: str) -> list[str]:
+        """질문에서 핵심 키워드 추출 (CATEGORY_KEYWORD_MAP 기반 루프)"""
         queryLower = query.lower()
         foundKeywords = []
 
-        if any(kw in queryLower for kw in petKeywords):
-            foundKeywords.append("반려동물")
-        if any(kw in queryLower for kw in parkingKeywords):
-            foundKeywords.append("주차")
-        if any(kw in queryLower for kw in poolKeywords):
-            foundKeywords.append("수영장")
-        if any(kw in queryLower for kw in breakfastKeywords):
-            foundKeywords.append("조식")
+        for category, keywords in self.CATEGORY_KEYWORD_MAP.items():
+            if any(kw.lower() in queryLower for kw in keywords):
+                foundKeywords.append(category)
 
         return foundKeywords
 
@@ -130,13 +195,6 @@ class AnswerVerifier:
         chunkTextsLower = chunkTexts.lower()
         chunkCategories = [c.get("metadata", {}).get("category", "").lower() for c in chunks[:5]]
         chunkPageTypes = [c.get("metadata", {}).get("page_type", "").lower() for c in chunks[:5]]
-
-        categoryKeywordMap = {
-            "반려동물": ["반려", "pet", "펫", "강아지", "dog", "애견", "소형견", "반려견", "동물", "salon", "패키지", "불가", "동반"],
-            "주차": ["주차", "parking", "발렛", "valet", "파킹", "차량", "주차장"],
-            "수영장": ["수영", "pool", "풀", "swimming", "인피니티", "워터"],
-            "조식": ["조식", "breakfast", "아침", "뷔페", "dining", "식사", "레스토랑"],
-        }
 
         for keyword in queryKeywords:
             keywordFound = False
@@ -153,14 +211,15 @@ class AnswerVerifier:
                         break
 
             if not keywordFound:
-                expandedKeywords = categoryKeywordMap.get(keyword, [keyword])
+                expandedKeywords = self.CATEGORY_KEYWORD_MAP.get(keyword, [keyword])
                 for kw in expandedKeywords:
                     if kw.lower() in chunkTextsLower:
                         keywordFound = True
                         break
 
             if not keywordFound:
-                print(f"[관련성 검증] '{keyword}' 관련 정보 미발견 — 하지만 검색 결과가 있으므로 진행")
+                print(f"[관련성 검증] '{keyword}' 관련 정보 미발견 → 관련성 부족 판정")
+                return False, f"'{keyword}' 관련 정보가 검색 결과에 없습니다"
 
         return True, ""
 
@@ -231,6 +290,19 @@ class AnswerVerifier:
             if compiledPattern.search(answer):
                 issues.append(f"금지패턴: {desc}")
 
+        # 6. 네비게이션/UI 요소 감지 (raw dump 방어)
+        navMatches = self._RE_NAV_ELEMENTS.findall(answer)
+        if len(navMatches) >= 2:
+            issues.append(f"비정상: 네비게이션/UI 요소 포함 ({len(navMatches)}개)")
+
+        # 7. 비문장형 답변 감지 (한글 50자 이상인데 종결어미 없는 단어 나열)
+        koreanCount = len(re.findall(r'[가-힣]', answer))
+        hasEnding = bool(self._RE_SENTENCE_ENDINGS.search(answer))
+        isBullet = bool(re.search(r'[-•]\s*[가-힣]', answer))
+        isFaq = "Q:" in answer or "A:" in answer
+        if koreanCount >= 50 and not hasEnding and not isBullet and not isFaq:
+            issues.append("비정상: 비문장형 답변 (종결어미 없는 단어 나열)")
+
         return len(issues) == 0, issues
 
     def extractDirectAnswer(self, topText: str, query: str) -> str:
@@ -287,6 +359,12 @@ class AnswerVerifier:
 
             if len(parts) >= 2:
                 directAnswer = "\n".join([f"- {p}" for p in parts])
+
+        # 정제: 네비게이션 요소 제거 후 너무 짧으면 None
+        if directAnswer:
+            directAnswer = self._stripNavElements(directAnswer)
+            if len(directAnswer) < 10:
+                return None
 
         return directAnswer
 
@@ -374,8 +452,9 @@ class AnswerVerifier:
         issues = []
         cleanedAnswer = answer
 
+        # 한글 고유명사 최대 4단어 제한 (문장 전체 greedy 매칭 방지)
         bilingualPattern = re.findall(
-            r'([가-힣]{2,}(?:\s+[가-힣]+)*)\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)',
+            r'([가-힣]{2,}(?:\s+[가-힣]+){0,3})\s*\(([A-Za-z][A-Za-z\s&\'-]+)\)',
             answer
         )
         quotedNames = re.findall(r"['\"]([가-힣A-Za-z][가-힣A-Za-z\s&\'-]+)['\"]", answer)

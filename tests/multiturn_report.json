@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-12T13:05:50.074330",
+  "timestamp": "2026-02-19T22:59:00.592117",
   "totalScenarios": 6,
-  "passedScenarios": 4,
+  "passedScenarios": 5,
   "totalTurns": 22,
-  "passedTurns": 19,
+  "passedTurns": 21,
   "scenarios": [
     {
       "name": "부산_4턴_주제전환",
@@ -16,9 +16,9 @@
         {
           "turnNum": 1,
           "query": "강아지 데려와도 돼?",
-          "answer": "그랜드 조선 부산에서는 반려동물 동반이 불가합니다. 공용 시설에 입장이 불가하며, 보조견이나 반려동물 전용 상품 이용 시에도 지정 구역 내에서만 출입이 허용됩니다.\n\n참고 정보: https://gjb.josunhotel.com/policy/hotel.do",
+          "answer": "그랜드 조선 부산에서는 반려동물 동반이 불가합니다. 공용 시설에 입장이 금지되며, 장애인 복지법에 따른 보조견과 반려동물 전용 상품 이용 시 지정 구역 내 출입은 허용됩니다. 문의: 그랜드 조선 부산 (051-922-5000)\n\n참고 정보: https://gjb.josunhotel.com/policy/hotel.do",
           "needsClarification": false,
-          "score": 0.7392008185386658,
+          "score": 0.7234344959259034,
           "sources": [
             "hotel.do"
           ],
@@ -35,22 +35,17 @@
         {
           "turnNum": 2,
           "query": "레스토랑 위치 알려줘",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [그랜드 조선 부산] (출처: https://gjb.josunhotel.com/dining/aria.do)\n[URL 상세: 다이닝 정보 페이지, dining, 출처 호텔: 그랜드 조선 부산]\n그랜드 조선 부산 레스토랑: 아리아(Aria)\n\n- 문의/예약: 051-922-5050, 5051\n- 좌석",
+          "answer": "- Palais de Chine\n- 운영시간: 12:00 - 14:30\n- 위치: 그랜드 조선 부산 5층\n- 문의: 051-922-5100, 5101\n-\n\n참고 정보:\nhttps://gjb.josunhotel.com/dining/aria.do\nhttps://gjb.josunhotel.com/dining/palais.do",
           "needsClarification": false,
-          "score": 0.7229449629783631,
+          "score": 0.7207183027267456,
           "sources": [
-            "aria.do",
-            "palais.do",
-            "subMain.do",
-            "entertainment.do",
-            "deli.do"
+            "aria.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
           "keywordMatch": true,
           "matchedKeywords": [
-            "아리아",
-            "레스토랑",
+            "층",
             "문의"
           ],
           "contextMatch": true,
@@ -59,18 +54,18 @@
         {
           "turnNum": 3,
           "query": "아리아 디너 금액이 얼마야?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [그랜드 조선 부산] (출처: https://gjb.josunhotel.com/dining/aria.do)\n[URL 상세: 다이닝 정보 페이지, 메뉴 상세, 출처 호텔: 그랜드 조선 부산]\n그랜드 조선 부산 아리아(Aria) 상세 안내\n\nQ: 그랜드 조선 부산 아리아(Aria) 가격과 운영시간을 ",
+          "answer": "그랜드 조선 부산 아리아(Aria)의 상세 안내입니다.\n위치: 그랜드 조선 부산 2층\n문의/예약: 051-922-5050, 5051\n좌석 수: 총 175석\n\n운영시간:\n- Mon ~ Sat  11:30 - 14:30\n- Sun - PartⅠ11:30 - 13:20\n- Sun - PartⅡ13:50 - 15:40\n- Sun ~ Fri  17:30 - 21:3",
           "needsClarification": false,
-          "score": 0.7498190593719483,
+          "score": 0.7564449489116669,
           "sources": [
-            "aria.do",
-            "step0.do?searchSysCode=GJB&diningCode=003"
+            "aria.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
           "keywordMatch": true,
           "matchedKeywords": [
-            "아리아"
+            "아리아",
+            "문의"
           ],
           "contextMatch": true,
           "passed": true
@@ -78,13 +73,11 @@
         {
           "turnNum": 4,
           "query": "운영 시간이 어떻게돼?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [그랜드 조선 부산] (출처: https://gjb.josunhotel.com/dining/aria.do)\n[URL 상세: 다이닝 정보 페이지, dining, 출처 호텔: 그랜드 조선 부산]\n그랜드 조선 부산 아리아(Aria) 상세 안내\n\nQ: 그랜드 조선 부산 아리아(Aria) 가격과 운영시간을",
+          "answer": "그랜드 조선 부산 조식은 아리아(Aria) 레스토랑에서 06:30 - 10:00에 운영됩니다. 조식 시간: 06:30 - 10:00 (매일). 위치: 그랜드 조선 부산 2층 아리아(Aria). 문의: 051-922-5050, 5051. 조식 가격:. - 어린이(49개월~12세): 37,000원. 조식 예약은 별도로 제공하지 않으며 객실 투숙객만 이용 가능합",
           "needsClarification": false,
-          "score": 0.7205560684204102,
+          "score": 0.7158044457435608,
           "sources": [
-            "aria.do",
-            "step0.do?searchSysCode=GJB&diningCode=003",
-            "list.do"
+            "aria.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -101,19 +94,18 @@
       "name": "제주_6턴_시설탐색",
       "hotel": "grand_josun_jeju",
       "totalTurns": 6,
-      "passedTurns": 4,
-      "failedTurns": 2,
+      "passedTurns": 5,
+      "failedTurns": 1,
       "passed": false,
       "turns": [
         {
           "turnNum": 1,
           "query": "객실은 몇개 있나요?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [그랜드 조선 제주] (출처: https://gjj. josunhotel. com/about/faq. do). [URL 상세: about, 출처 호텔: 그랜드 조선 제주]. Q: 4인이 함께 투숙 가능한 객실이 있나요?. A: Royal Suite와 Prestige Hill Suite 입니다.\n\n",
+          "answer": "그랜드 조선 제주에서는 다양한 객실을 제공하고 있습니다. 디럭스 객실, 스위트 객실, 스위트 2베드룸 객실, Kids Deluxe, Kids Premier Suite, Studio Suite, Premier Suite, Luxury Suite, Royal Suite, The Suite 등이 있습니다.\n\n참고 정보:\nhttps://gjj.josunhotel.",
           "needsClarification": false,
-          "score": 0.7542867243289948,
+          "score": 0.7925448596477509,
           "sources": [
             "faq.do",
-            "hotel.do",
             "subMain.do"
           ],
           "expectClarification": false,
@@ -128,13 +120,11 @@
         {
           "turnNum": 2,
           "query": "레스토랑 뭐뭐 있어?",
-          "answer": "그랜드 조선 제주에서는 다양한 레스토랑을 이용하실 수 있습니다. 아리아(Aria)는 로컬 식재료를 활용한 프리미엄 뷔페 레스토랑이며, 그랑 제이는 편안하고 아늑한 공간에서 즐길 수 있는 고메 라운지입니다. 또한 조선델리는 건강한 식재료를 사용한 케이크와 페이스트리를 제공합니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/dining/su",
+          "answer": "- 조선델리\n- 운영시간: 08:00 - 21:30\n- 위치: 본관 1층\n- 문의: 064-735-8992\n-\n\n참고 정보:\nhttps://gjj.josunhotel.com/dining/aria.do\nhttps://gjj.josunhotel.com/dining/granj.do\nhttps://gjj.josunhotel.com/dining/deli.do",
           "needsClarification": false,
-          "score": 0.6923097062110901,
+          "score": 0.7326104521751404,
           "sources": [
-            "subMain.do",
             "aria.do",
-            "deli.do",
             "granj.do"
           ],
           "expectClarification": false,
@@ -147,14 +137,11 @@
         {
           "turnNum": 3,
           "query": "스타벅스는?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [그랜드 조선 제주] (출처: https://gjj.josunhotel.com/about/faq.do)\n[URL 상세: about, 출처 호텔: 그랜드 조선 제주]\n고객센터 Faq 호텔 이용과 관련된 궁금한 사항을 남겨주시면 신속하게 답변 드리겠습니다. 항상 고객의 소리에 귀 기울이는 조선호텔앤리",
+          "answer": "그랜드 조선 제주에는 스타벅스 그랜드조선제주점이 있습니다. 위치는 본관 R층이며, 운영시간은 08:00 - 22:00 입니다.\n\n참고 정보: https://gjj.josunhotel.com/facilites/entertainment.do",
           "needsClarification": false,
-          "score": 0.7,
+          "score": 0.6731255650520325,
           "sources": [
-            "faq.do",
-            "entertainment.do",
-            "subMain.do",
-            "subMain.do"
+            "entertainment.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -166,11 +153,12 @@
         {
           "turnNum": 4,
           "query": "고메 라운지 시그니처 메뉴가 뭐야?",
-          "answer": "그랑 제이에서 제공하는 고메 라운지 시그니처 메뉴는 다음과 같습니다. - 한라봉 버터 & 브레드. - 드라이 토마토와 한치 세비체. - 한우 안심 스테이크. - 백향과 무스 위 메뉴들은 제주 식재료를 활용한 다채로운 선택.\n\n참고 정보: https://www.josunhotel.com/resve/dining/step0.do?searchSysCode=GJJ&",
+          "answer": "- 조선델리\n- 운영시간: 08:00 - 21:30\n- 위치: 본관 1층\n- 문의: 064-735-8992\n-\n\n참고 정보:\nhttps://gjj.josunhotel.com/dining/deli.do\nhttps://gjj.josunhotel.com/dining/subMain.do",
           "needsClarification": false,
-          "score": 0.7992432200908661,
+          "score": 0.8207980871200562,
           "sources": [
-            "step0.do?searchSysCode=GJJ&diningCode=006"
+            "deli.do",
+            "subMain.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -182,34 +170,30 @@
         {
           "turnNum": 5,
           "query": "수영장 종료 시간이 언제야",
-          "answer": "죄송합니다, 해당 내용으로 정확한 정보를 찾을 수 없습니다.\n자세한 사항은 그랜드 조선 제주 (064-735-8000)로 문의 부탁드립니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/facilites/peakpool.do\nhttps://gjj.josunhotel.com/facilites/gardenpool.do\nhttps://gjj.j",
+          "answer": "운영시간: 09:00 - 21:00 (휴식시간: 13:50 - 14:30). 위치: 본관 1층. 문의: 064-735-8911. 9M, 길이 15M, 너비 8. 2M, 길이 18M, 너비 11. 6M, 길이 8. 5M, 너비 9. 수온: 5-9월 27-30℃, 10-4월 30-33℃. 운영시간: 10:00 - 22:00 (휴식시간: 13:00 - 14:00",
           "needsClarification": false,
-          "score": 0.7994192123413086,
+          "score": 0.7943218231201172,
           "sources": [
-            "peakpool.do",
-            "gardenpool.do",
-            "heavenlypool.do",
-            "faq.do",
-            "fitness.do"
+            "gardenpool.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
-          "keywordMatch": false,
-          "matchedKeywords": [],
+          "keywordMatch": true,
+          "matchedKeywords": [
+            "시"
+          ],
           "contextMatch": true,
-          "passed": false
+          "passed": true
         },
         {
           "turnNum": 6,
           "query": "피트니스는 몇시에 문을 열어?",
-          "answer": "죄송합니다, 해당 내용으로 정확한 정보를 찾을 수 없습니다.\n자세한 사항은 그랜드 조선 제주 (064-735-8000)로 문의 부탁드립니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/facilites/fitness.do\nhttps://gjj.josunhotel.com/facilites/gxroom.do\nhttps://gjj.josunh",
+          "answer": "피트니스 센터는 07:00부터 운영됩니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/about/faq.do\nhttps://gjj.josunhotel.com/facilites/gxroom.do",
           "needsClarification": false,
-          "score": 0.7572512412071228,
+          "score": 0.7536690616607666,
           "sources": [
-            "fitness.do",
-            "gxroom.do",
             "faq.do",
-            "royalSuite.do"
+            "gxroom.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -248,9 +232,9 @@
         {
           "turnNum": 2,
           "query": "수영장 위치 알려줘",
-          "answer": "조선 팰리스의 수영장은 26층에 위치해 있습니다.\n\n참고 정보: https://jpg.josunhotel.com/facilities/Pool.do",
+          "answer": "조선 팰리스 수영장은 26층 조선 웰니스 클럽에 위치해 있습니다.\n\n참고 정보: https://jpg.josunhotel.com/facilities/Pool.do",
           "needsClarification": false,
-          "score": 0.7740121364593506,
+          "score": 0.7766786694526673,
           "sources": [
             "Pool.do"
           ],
@@ -264,12 +248,10 @@
         {
           "turnNum": 3,
           "query": "운영시간은?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [조선 팰리스] (출처: https://jpg.josunhotel.com/facilities/Pool.do)\n[URL 상세: 부대시설 정보 페이지, facilities, 출처 호텔: 조선 팰리스]\nFACILITES 상세 Pool 강남의 마천루를 한눈에 간직한 조선 웰니스 클럽 실내 수영장에서 여유",
+          "answer": "조선 팰리스 수영장은 06:00 - 22:00에 운영됩니다.\n\n수영장 운영시간: 06:00 - 22:00\n위치: 26층 조선 웰니스 클럽\n규모: 25M x 6M\n문의: 02-727-7230\n\n이용 안내:\n- 투숙객 이용 가능\n- 수영복, 수영모 필수 착용\n\nPool Hours: 06:00 - 22:00\nLocation: 26F Josun Wellness C",
           "needsClarification": false,
-          "score": 0.7713255763053894,
+          "score": 0.747650533914566,
           "sources": [
-            "Pool.do",
-            "faq.do",
             "Sauna.do"
           ],
           "expectClarification": false,
@@ -294,9 +276,9 @@
         {
           "turnNum": 1,
           "query": "스타벅스 위치 알려줘",
-          "answer": "스타벅스 그랜드조선제주점은 본관 R층에 위치해 있습니다. 운영시간은 오전 8시부터 저녁 10시 30분까지이며, 편안한 시간 내내 조용한 휴식식을 즐길 수 있습니다.\n\n참고 정보: https://gjj.josunhotel.com/facilites/entertainment.do",
+          "answer": "그랜드 조선 제주에서 스타벅스 그랜드조선제주점은 본관 R층에 위치해 있습니다. 운영시간은 08:00부터 22:00까지이며, 자세한 정보는 1522-3232로 문의하실 수 있습니다.\n\n참고 정보: https://gjj.josunhotel.com/facilites/entertainment.do",
           "needsClarification": false,
-          "score": 0.7289466142654419,
+          "score": 0.7166955947875977,
           "sources": [
             "entertainment.do"
           ],
@@ -312,12 +294,12 @@
         {
           "turnNum": 2,
           "query": "스파 위치는?",
-          "answer": "- 웰니스 프로그램 자세히 보기 매장 이미지 이전 다음 시설안내 시설\n- 운영시간: 07:00 - 21:00\n- 위치: 힐 스위트관(신관) 3층\n- 문의: 064-735-8982\n\n참고 정보:\nhttps://gjj.josunhotel.com/facilites/fitness.do\nhttps://gjj.josunhotel.com/facilites/gxroom.",
+          "answer": "그랜드 조선 제주 스파는 본관 1층에 위치해 있습니다. 운영시간은 07:00부터 22:00까지이며, 투숙객은 무료로 이용 가능합니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/facilites/fitness.do\nhttps://gjj.josunhotel.com/about/faq.do",
           "needsClarification": false,
-          "score": 0.6916253066062927,
+          "score": 0.6860686731338501,
           "sources": [
             "fitness.do",
-            "gxroom.do"
+            "faq.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -329,13 +311,11 @@
         {
           "turnNum": 3,
           "query": "수영장은 어디에 있어?",
-          "answer": "죄송합니다, 해당 내용으로 정확한 정보를 찾을 수 없습니다.\n자세한 사항은 그랜드 조선 제주 (064-735-8000)로 문의 부탁드립니다.\n\n참고 정보:\nhttps://gjj.josunhotel.com/facilites/peakpool.do\nhttps://gjj.josunhotel.com/facilites/gardenpool.do\nhttps://gjj.j",
+          "answer": "위치: 힐 스위트관(신관) 6층.\n\n참고 정보: https://gjj.josunhotel.com/facilites/gardenpool.do",
           "needsClarification": false,
-          "score": 0.7404297471046448,
+          "score": 0.7547103643417359,
           "sources": [
-            "peakpool.do",
-            "gardenpool.do",
-            "heavenlypool.do"
+            "gardenpool.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -350,19 +330,18 @@
       "name": "레스케이프_반려동물_상세",
       "hotel": "lescape",
       "totalTurns": 3,
-      "passedTurns": 2,
-      "failedTurns": 1,
-      "passed": false,
+      "passedTurns": 3,
+      "failedTurns": 0,
+      "passed": true,
       "turns": [
         {
           "turnNum": 1,
           "query": "강아지 데려갈 수 있어?",
-          "answer": "반려견을 동반하실 수 있습니다. - 소형견(10kg 이하) 최대 2마리까지 동반 가능합니다.\n- 추가 요금이 발생하며, 1마리는 100,000원, 2마리는 160,000원입니다 (5박 기준).\n- 공격성이 있는 견종은 입장이 제한될 수 있습니다.\n- 반려견은 객실 내에서만 동반 가능하며, 공용시설(로비, 레스토랑 등)에 들어가시는 것은 불가합니다. 사전 예",
+          "answer": "레스케이프는 반려견 동반 투숙이 가능합니다.\n\n- 소형견(10kg 이하) 최대 2마리까지 동반 가능\n- 반려견 동반 시 추가 요금 발생 (1마리 100,000원, 2마리 160,000원 / 5박 기준)\n- 공격성 견종은 입장이 제한됩니다\n- 반려견은 객실 내에서만 동반 가능하며, 공용시설(로비, 레스토랑 등) 입장 불가\n- 반드시 사전 예약 시 요청해 주세",
           "needsClarification": false,
-          "score": 0.8583646595478058,
+          "score": 0.799280196428299,
           "sources": [
-            "rooms",
-            "hotel.do"
+            "rooms"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -377,29 +356,29 @@
         {
           "turnNum": 2,
           "query": "비용이 얼마야?",
-          "answer": "[시스템 오류] LLM 응답 실패. 검색된 정보: [참조1] [레스케이프] (출처: https://les.josunhotel.com/rooms)\n[URL 상세: policy, 출처 호텔: 레스케이프]\nQ: 레스케이프 반려견 동반 가능한가요?\nA: 반려견 동반 투숙은 호텔 사전 요청 및 예약 확정이 필요하며, 추가 요금이 발생합니다.\n\n반려견 추가 요금 (5",
+          "answer": "반려견 동반 투숙은 호텔 사전 요청 및 예약 확정이 필요하며, 추가 요금이 발생합니다.\n\n반려견 추가 요금 (5박 당 1회, VAT 별도):\n- 1마리: 100,000원\n- 2마리: 160,000원\n\n이용 조건:\n- 10kg 이하 소형견만 가능 (최대 2마리)\n- 공격성 견종 입장 제한\n- 공용시설 입장 불가 (객실 내에서만 가능)\n- 사전 예약 필수\n\n문",
           "needsClarification": false,
-          "score": 0.832675251364708,
+          "score": 0.8251521021127701,
           "sources": [
-            "rooms",
-            "hotel.do",
-            "petfrientdly.do"
+            "rooms"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
-          "keywordMatch": false,
-          "matchedKeywords": [],
+          "keywordMatch": true,
+          "matchedKeywords": [
+            "원"
+          ],
           "contextMatch": true,
-          "passed": false
+          "passed": true
         },
         {
           "turnNum": 3,
           "query": "몇 킬로까지 돼?",
-          "answer": "반려견을 데리고 투숙하실 수 있으며, 소형견(10kg 이하) 최대 2마리까지 동반 가능합니다.\n\n참고 정보: https://les.josunhotel.com/rooms",
+          "answer": "레스케이프에서 동반 가능한 강아지의 무게 제한은 10kg 이하입니다.\n\n참고 정보: https://les.josunhotel.com/policy/hotel.do",
           "needsClarification": false,
-          "score": 0.8290454828739167,
+          "score": 0.7875007271766663,
           "sources": [
-            "rooms"
+            "hotel.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
@@ -424,9 +403,9 @@
         {
           "turnNum": 1,
           "query": "체크인 몇시야?",
-          "answer": "체크인 시간은 오후 3시부터 가능합니다.\n\n참고 정보: https://grp.josunhotel.com/policy/hotel.do",
+          "answer": "체크인은 오후 3시부터 가능합니다.\n\n참고 정보: https://grp.josunhotel.com/policy/hotel.do",
           "needsClarification": false,
-          "score": 0.760907918214798,
+          "score": 0.7603234052658081,
           "sources": [
             "hotel.do"
           ],
@@ -442,19 +421,17 @@
         {
           "turnNum": 2,
           "query": "조식 운영시간 알려줘",
-          "answer": "조식은 오전 6시 30분부터 10시까지 운영됩니다.\n\n참고 정보:\nhttps://grp.josunhotel.com/dining/andish.do\nhttps://www.josunhotel.com/resve/dining/step0.do?searchSysCode=GRP&diningCode=001",
+          "answer": "위치: 그래비티 조선 서울 판교 2층 앤디쉬(Andish). 문의: 031-539-4820. 좌석 수: 총 146석. Location: 2F Andish Buffet Restaurant. Contact: 031-539-4820.\n\n참고 정보: https://grp.josunhotel.com/dining/andish.do",
           "needsClarification": false,
-          "score": 0.786454725265503,
+          "score": 0.7348280549049377,
           "sources": [
-            "andish.do",
-            "step0.do?searchSysCode=GRP&diningCode=001"
+            "andish.do"
           ],
           "expectClarification": false,
           "clarificationMatch": true,
           "keywordMatch": true,
           "matchedKeywords": [
-            "시",
-            "조식"
+            "문의"
           ],
           "contextMatch": true,
           "passed": true
@@ -462,11 +439,10 @@
         {
           "turnNum": 3,
           "query": "주차 가능해?",
-          "answer": "주차는 가능합니다. 호텔 이용 고객에게는 일정 시간에 따른 무료 주차 혜택이 제공되며, 일반 이용 시에는 10분당 1,000원의 요금이 부과됩니다. 주차장은 호텔 지하주차장에 위치해 있습니다.\n\n참고 정보:\nhttps://grp.josunhotel.com/about/faq.do\nhttps://grp.josunhotel.com/policy/hotel.do",
+          "answer": "그래비티 판교에서는 투숙객에게 무료 주차 혜택을 제공합니다. - 일반 이용 시 주차 요금은 10분당 1,000원이며, 1일 최대 요금은 80,000원입니다.\n- 주차장 위치는 호텔 지하주차장이며, 대표전화 번호는 031-539-4800입니다.\n\n참고 정보: https://grp.josunhotel.com/policy/hotel.do",
           "needsClarification": false,
-          "score": 0.691983836889267,
+          "score": 0.7155679166316986,
           "sources": [
-            "faq.do",
             "hotel.do"
           ],
           "expectClarification": false,

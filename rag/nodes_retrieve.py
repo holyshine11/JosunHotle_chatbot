@@ -98,22 +98,33 @@ def retrieveNode(state: RAGState, *, indexer=None) -> dict:
             effectiveCategory = None
 
     # === 리랭킹 (Cross-Encoder) ===
+    # 조건부 스킵: top score가 높으면 리랭킹 불필요 (200~2000ms 절약)
+    preRerankTopScore = max((r["score"] for r in results), default=0.0) if results else 0.0
+
+    rerankQuality = "ok"  # 리랭커 품질 신호 (ok/poor/skipped)
     if RERANKER_ENABLED and results and len(results) >= 2:
-        try:
-            from rag.reranker import getReranker
-            reranker = getReranker()
-            if reranker.isAvailable:
-                results = reranker.rerank(
-                    query=searchQuery,
-                    chunks=results,
-                    topK=5
-                )
-                # 리랭킹은 순서/필터만 변경, 점수 기준은 original_score 유지
-                for chunk in results:
-                    if "original_score" in chunk:
-                        chunk["score"] = chunk["original_score"]
-        except Exception as e:
-            print(f"[리랭커 오류] {e}")
+        from rag.reranker import getReranker, Reranker
+        if preRerankTopScore >= Reranker.SKIP_THRESHOLD:
+            print(f"[리랭커] 스킵 (top score {preRerankTopScore:.3f} >= {Reranker.SKIP_THRESHOLD})")
+            rerankQuality = "skipped"
+        else:
+            try:
+                reranker = getReranker()
+                if reranker.isAvailable:
+                    results = reranker.rerank(
+                        query=searchQuery,
+                        chunks=results,
+                        topK=5
+                    )
+                    # 리랭커 품질 신호 추출 (모든 결과 저품질이면 "poor")
+                    if results and results[0].get("_rerank_quality") == "poor":
+                        rerankQuality = "poor"
+                    # 리랭킹은 순서/필터만 변경, 점수 기준은 original_score 유지
+                    for chunk in results:
+                        if "original_score" in chunk:
+                            chunk["score"] = chunk["original_score"]
+            except Exception as e:
+                print(f"[리랭커 오류] {e}")
 
     # 최고 점수 계산
     topScore = max((r["score"] for r in results), default=0.0) if results else 0.0
@@ -126,6 +137,7 @@ def retrieveNode(state: RAGState, *, indexer=None) -> dict:
         "top_score": topScore,
         "conversation_topic": conversationTopic,
         "effective_category": effectiveCategory,
+        "rerank_quality": rerankQuality,
     }
 
 
@@ -135,6 +147,7 @@ def evidenceGateNode(state: RAGState) -> dict:
     chunks = state["retrieved_chunks"]
     topScore = state["top_score"]
     isValidQuery = state.get("is_valid_query", True)
+    rerankQuality = state.get("rerank_quality", "ok")
 
     # 질문 유효성 검사
     if not isValidQuery:
@@ -142,6 +155,17 @@ def evidenceGateNode(state: RAGState) -> dict:
             **state,
             "evidence_passed": False,
             "evidence_reason": "호텔 관련 질문이 아닙니다.",
+        }
+
+    # 리랭커 절대 품질 미달: 모든 검색 결과가 쿼리와 무관
+    if rerankQuality == "poor":
+        print(f"[evidenceGate] 리랭커 품질 미달 → 근거 부족 판정")
+        _elapsed = time.time() - _start
+        print(f"[타이밍] evidenceGate: {_elapsed:.3f}s")
+        return {
+            **state,
+            "evidence_passed": False,
+            "evidence_reason": "검색 결과의 의미적 관련성이 낮습니다. (리랭커 품질: poor)",
         }
 
     # 검증 조건
@@ -237,17 +261,32 @@ def _extractConversationTopic(history: list[dict]) -> Optional[str]:
 
 
 def _expandQuery(query: str) -> str:
-    """쿼리 확장 (동의어 추가)"""
-    expandedTerms = []
+    """쿼리 확장 (동의어 추가) - 가장 구체적인 매칭 1개만 확장"""
     queryLower = query.lower()
 
-    for term, synonyms in SYNONYM_DICT.items():
-        if term.lower() in queryLower:
-            expandedTerms.extend(synonyms)
+    # 매칭되는 키워드 중 가장 긴(구체적인) 것 1개만 선택
+    bestMatch = None
+    bestLen = 0
+    for term in SYNONYM_DICT:
+        termLower = term.lower()
+        if termLower in queryLower and len(termLower) > bestLen:
+            bestMatch = term
+            bestLen = len(termLower)
+
+    if not bestMatch:
+        return query
+
+    # 쿼리에 이미 포함된 단어 제외, 순서 고정 (리스트 유지)
+    queryWords = set(queryLower.split())
+    expandedTerms = []
+    for s in SYNONYM_DICT[bestMatch]:
+        if s.lower() not in queryLower and s.lower() not in queryWords:
+            expandedTerms.append(s)
+        if len(expandedTerms) >= 3:
+            break
 
     if expandedTerms:
-        uniqueTerms = list(set(expandedTerms))
-        return f"{query} {' '.join(uniqueTerms[:5])}"
+        return f"{query} {' '.join(expandedTerms)}"
 
     return query
 

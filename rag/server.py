@@ -8,9 +8,10 @@ FastAPI 기반 RAG 챗봇 서버
 
 import os
 import sys
-import io
 import json
+import time
 import asyncio
+import threading
 import traceback
 from pathlib import Path
 
@@ -36,6 +37,40 @@ _envOrigins = os.getenv("ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = _envOrigins.split(",") if _envOrigins else ["*"]
 
 app = FastAPI(title="Josun Hotel 챗봇 API")
+
+
+@app.on_event("startup")
+async def warmup():
+    """서버 시작 시 모든 모델 사전 로딩 (cold start 제거)"""
+    import time
+    print("[Warm-up] 모델 사전 로딩 시작...")
+    t0 = time.time()
+
+    # 1. RAG 그래프 초기화 (Embedding 모델 + Chroma + BM25)
+    getRagGraph()
+
+    # 2. 리랭커 모델 사전 로딩
+    try:
+        from rag.reranker import getReranker
+        reranker = getReranker()
+        reranker._loadModel()
+        print(f"[Warm-up] 리랭커 로딩 완료")
+    except Exception as e:
+        print(f"[Warm-up] 리랭커 로딩 실패: {e}")
+
+    # 3. Ollama LLM 모델 warm-up (keep_alive=-1로 메모리 상주)
+    try:
+        from rag.llm_provider import callLLM
+        await asyncio.to_thread(callLLM, prompt="안녕", system="", temperature=0.0, maxTokens=5)
+        print(f"[Warm-up] LLM 모델 로딩 완료")
+    except Exception as e:
+        print(f"[Warm-up] LLM warm-up 실패 (서버는 정상 작동): {e}")
+
+    elapsed = time.time() - t0
+    print(f"[Warm-up] 전체 완료 ({elapsed:.1f}s)")
+
+    # TTS는 브라우저 Web Speech API로 전환됨 (서버 측 Edge TTS 제거)
+
 
 # CORS 설정
 app.add_middleware(
@@ -117,43 +152,148 @@ async def health():
 
 @app.post("/chat/stream")
 async def chatStream(request: ChatRequest):
-    """SSE 스트리밍 채팅 엔드포인트"""
+    """SSE 스트리밍 채팅 엔드포인트 (실시간 LLM 토큰 + TTS 병렬 생성)"""
+
+    # 노드 완료 → 다음 단계 시작 메시지 (forward-looking)
+    STAGE_MESSAGES = {
+        "clarification_check": "관련 정보를 검색하고 있습니다...",  # → retrieve 시작
+        "evidence_gate": "답변을 생성하고 있습니다...",            # → answer_compose 시작
+        "answer_compose": "답변을 검증하고 있습니다...",           # → answer_verify 시작
+    }
+
     async def eventGenerator():
         try:
             from rag.session import sessionStore
+            from rag.llm_provider import setStreamCallback, clearStreamCallback
             sessionCtx = sessionStore.getOrCreate(request.sessionId)
 
-            # 즉시 status 이벤트 전송 (체감 속도 향상)
+            # 즉시 첫 상태 이벤트 전송
             yield f"data: {json.dumps({'event': 'status', 'stage': 'analyzing', 'message': '질문을 분석하고 있습니다...'}, ensure_ascii=False)}\n\n"
 
             rag = getRagGraph()
+            loop = asyncio.get_running_loop()
+            progressQueue = asyncio.Queue()
+            gotRealTokens = [False]  # 실시간 LLM 토큰 수신 여부
+            streamedTokens = []  # 스트리밍된 토큰 추적 (검증 후 비교용)
 
-            # asyncio.to_thread로 이벤트 루프 블로킹 방지
-            result = await asyncio.to_thread(
-                rag.chat,
-                query=request.message,
-                hotel=request.hotelId,
-                history=request.history,
-                sessionCtx=sessionCtx
-            )
+            # LLM 토큰 콜백 (answerCompose에서만 호출됨)
+            def onToken(token):
+                gotRealTokens[0] = True
+                streamedTokens.append(token)
+                loop.call_soon_threadsafe(
+                    progressQueue.put_nowait, ("token", token)
+                )
+
+            # 노드 진행 상황 콜백 (파이프라인 스레드에서 호출)
+            def onProgress(nodeName):
+                # evidence_gate 완료 → answerCompose 시작 직전에만 스트리밍 활성화
+                if nodeName == "evidence_gate":
+                    setStreamCallback(onToken)
+                # answer_compose 완료 → 스트리밍 비활성화 (queryRewrite 등 다른 LLM은 캐시 유지)
+                elif nodeName == "answer_compose":
+                    clearStreamCallback()
+
+                msg = STAGE_MESSAGES.get(nodeName)
+                if msg:
+                    loop.call_soon_threadsafe(
+                        progressQueue.put_nowait, ("stage", msg)
+                    )
+
+            # 파이프라인 실행 (별도 스레드, 스트리밍은 onProgress에서 동적 제어)
+            def runPipeline():
+                try:
+                    result = rag.chatWithProgress(
+                        query=request.message,
+                        hotel=request.hotelId,
+                        history=request.history,
+                        sessionCtx=sessionCtx,
+                        progressCallback=onProgress
+                    )
+                    clearStreamCallback()  # 안전 정리
+                    loop.call_soon_threadsafe(
+                        progressQueue.put_nowait, ("result", result)
+                    )
+                except Exception as e:
+                    clearStreamCallback()
+                    print(f"[파이프라인 에러] {e}")
+                    traceback.print_exc()
+                    loop.call_soon_threadsafe(
+                        progressQueue.put_nowait, ("error", str(e))
+                    )
+
+            thread = threading.Thread(target=runPipeline, daemon=True)
+            thread.start()
+
+            # 진행 상황 + 토큰 이벤트 전달 (파이프라인 완료까지)
+            result = None
+            lastMsg = "질문을 분석하고 있습니다..."  # 초기 메시지 중복 방지
+            while True:
+                event = await asyncio.wait_for(progressQueue.get(), timeout=60)
+                eventType, data = event
+
+                if eventType == "stage":
+                    if data != lastMsg:
+                        lastMsg = data
+                        yield f"data: {json.dumps({'event': 'status', 'stage': 'processing', 'message': data}, ensure_ascii=False)}\n\n"
+                elif eventType == "token":
+                    yield f"data: {json.dumps({'event': 'token', 'text': data}, ensure_ascii=False)}\n\n"
+                elif eventType == "result":
+                    result = data
+                    break
+                elif eventType == "error":
+                    yield f"data: {json.dumps({'event': 'error', 'message': '요청을 처리하는 중 오류가 발생했습니다.'}, ensure_ascii=False)}\n\n"
+                    return
 
             answer = result.get("answer", "응답을 생성할 수 없습니다.")
             needsClarification = result.get("needs_clarification", False)
 
             if needsClarification:
                 yield f"data: {json.dumps({'event': 'clarification', 'answer': answer, 'options': result.get('clarification_options', []), 'type': result.get('clarification_type'), 'originalQuery': result.get('original_query')}, ensure_ascii=False)}\n\n"
-            else:
-                # 답변을 단어 단위로 스트리밍 (타이핑 효과)
+            elif not gotRealTokens[0]:
+                # FAQ 직접 추출 등 LLM 미사용 → 기존 단어 단위 스트리밍
                 words = answer.split()
                 for i, word in enumerate(words):
                     separator = ' ' if i < len(words) - 1 else ''
                     yield f"data: {json.dumps({'event': 'token', 'text': word + separator}, ensure_ascii=False)}\n\n"
                     if i % 3 == 0:
                         await asyncio.sleep(0.02)
+            elif gotRealTokens[0]:
+                # LLM 토큰이 스트리밍되었으나, 검증 후 답변이 크게 변경된 경우
+                import re as _re
+                streamedText = ''.join(streamedTokens)
+                streamedClean = _re.sub(r'\s*\[REF:[\d,\s]+\]', '', streamedText).strip()
+                answerCore = _re.split(r'\n\n참고\s*정보', answer)[0].strip()
 
-            # 완료 이벤트 (출처, 점수 등 메타데이터)
-            yield f"data: {json.dumps({'event': 'done', 'sources': result.get('sources', []), 'score': result.get('score'), 'sessionId': sessionCtx.session_id}, ensure_ascii=False)}\n\n"
+                # 스트리밍 텍스트와 최종 답변의 첫 50자 비교
+                isReplaced = (
+                    len(streamedClean) > 0 and len(answerCore) > 0
+                    and not answerCore.startswith(streamedClean[:min(50, len(streamedClean))])
+                )
 
+                if isReplaced:
+                    # 검증에서 거부됨 → replace 이벤트로 스트리밍 텍스트 초기화 후 재전송
+                    print(f"[스트리밍] 검증 후 답변 변경 감지 → replace 이벤트 전송")
+                    yield f"data: {json.dumps({'event': 'replace'}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.05)
+                    words = answer.split()
+                    for i, word in enumerate(words):
+                        separator = ' ' if i < len(words) - 1 else ''
+                        yield f"data: {json.dumps({'event': 'token', 'text': word + separator}, ensure_ascii=False)}\n\n"
+                        if i % 3 == 0:
+                            await asyncio.sleep(0.02)
+
+            # done 이벤트 즉시 전송 (TTS 대기 없이 UI 즉시 업데이트)
+            doneData = {
+                'event': 'done',
+                'answer': answer,
+                'sources': result.get('sources', []),
+                'score': result.get('score'),
+                'sessionId': sessionCtx.session_id,
+            }
+            yield f"data: {json.dumps(doneData, ensure_ascii=False)}\n\n"
+
+        except asyncio.TimeoutError:
+            yield f"data: {json.dumps({'event': 'error', 'message': '응답 시간이 초과되었습니다.'}, ensure_ascii=False)}\n\n"
         except Exception as e:
             print(f"[스트리밍 에러] {e}")
             traceback.print_exc()
@@ -210,45 +350,11 @@ async def chat(request: ChatRequest):
         )
 
 
-# ========== TTS 엔드포인트 (Edge TTS) ==========
-TTS_VOICE = "ko-KR-HyunsuMultilingualNeural"  # 젊고 부드러운 남성 음성
 
-class TTSRequest(BaseModel):
-    text: str
-    rate: Optional[str] = "+0%"  # 속도 조절 (-50%~+100%)
-
-
-@app.post("/tts")
-async def tts(request: TTSRequest):
-    """텍스트를 음성(MP3)으로 변환"""
-    try:
-        import edge_tts
-
-        text = request.text.strip()
-        if not text:
-            raise HTTPException(status_code=400, detail="텍스트가 비어 있습니다.")
-        if len(text) > 2000:
-            text = text[:2000]  # 너무 긴 텍스트 제한
-
-        communicate = edge_tts.Communicate(text, TTS_VOICE, rate=request.rate)
-
-        # 메모리에 MP3 생성
-        buffer = io.BytesIO()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                buffer.write(chunk["data"])
-
-        buffer.seek(0)
-        return StreamingResponse(
-            buffer,
-            media_type="audio/mpeg",
-            headers={"Content-Disposition": "inline"}
-        )
-    except ImportError:
-        raise HTTPException(status_code=501, detail="edge-tts 패키지가 설치되지 않았습니다.")
-    except Exception as e:
-        print(f"[TTS 에러] {e}")
-        raise HTTPException(status_code=500, detail="음성 생성에 실패했습니다.")
+# ========== TTS ==========
+# TTS는 브라우저 Web Speech API로 전환 (서버 측 Edge TTS 제거)
+# - 서버 부하 0, 즉시 재생, 오프라인 동작
+# - Edge TTS 8~9초 지연 + 네트워크 실패 문제 해결
 
 
 # 정적 파일 제공 (UI)

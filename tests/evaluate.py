@@ -10,6 +10,7 @@ RAG 챗봇 자동 평가 스크립트
 """
 
 import json
+import re
 import sys
 import argparse
 from pathlib import Path
@@ -95,7 +96,12 @@ class RAGEvaluator:
 
         violatedKeywords = []
         for kw in forbiddenKeywords:
-            if kw.lower() in answerLower:
+            kwLower = kw.lower()
+            if len(kw) == 1 and re.match(r'[가-힣]', kw):
+                # 1글자 한글: 복합어 내부 매칭 방지 (예: "약" → "예약" 제외)
+                if re.search(f'(?<![가-힣]){re.escape(kwLower)}(?![가-힣])', answerLower):
+                    violatedKeywords.append(kw)
+            elif kwLower in answerLower:
                 violatedKeywords.append(kw)
 
         # 평가

@@ -1,0 +1,42 @@
+[
+  {
+    "hotel": "josun_palace",
+    "hotel_name": "조선 팰리스",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://jpg.josunhotel.com/facilities/Sauna.do",
+    "text": "조선 팰리스 피트니스 안내\n\nQ: 조선 팰리스 피트니스(헬스) 운영시간이 어떻게 되나요?\nA: 조선 팰리스 피트니스는 24시간 운영됩니다. (22시 이후 직원 동반 이용)\n\n운영시간: 24시간 (22:00 이후 직원 동반)\n위치: 26층 조선 웰니스 클럽\n문의: 02-727-7230\n\n이용 안내:\n- 투숙객 무료 이용\n- 만 16세 이상 입장 가능\n- 운동복, 운동화 필수 착용\n\nFitness Hours: 24 Hours (Staff accompanied after 22:00)\nLocation: 26F Josun Wellness Club"
+  },
+  {
+    "hotel": "grand_josun_busan",
+    "hotel_name": "그랜드 조선 부산",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://gjb.josunhotel.com/facilites/pool.do",
+    "text": "그랜드 조선 부산 피트니스 안내\n\nQ: 그랜드 조선 부산 피트니스(헬스) 운영시간이 어떻게 되나요?\nA: 그랜드 조선 부산 피트니스는 GRAND JOSUN ATHLETIC CLUB(GAC) 내에 위치하며 06:00 - 22:00에 운영됩니다.\n\n운영시간: 06:00 - 22:00\n위치: 6층 GRAND JOSUN ATHLETIC CLUB (GAC)\n정기 휴관: 매월 세 번째 화요일\n문의: 051-922-5160\n\n이용 안내:\n- 만 16세 이상 입장 가능\n- GAC는 피트니스, 수영장, 사우나를 포함하는 종합 운동 시설입니다\n\nFitness Hours: 06:00 - 22:00\nLocation: 6F Grand Josun Athletic Club (GAC)\nClosed: Third Tuesday of each month"
+  },
+  {
+    "hotel": "grand_josun_jeju",
+    "hotel_name": "그랜드 조선 제주",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://gjj.josunhotel.com/about/faq.do",
+    "text": "그랜드 조선 제주 피트니스 안내\n\nQ: 그랜드 조선 제주 피트니스(헬스) 운영시간이 어떻게 되나요?\nA: 그랜드 조선 제주 피트니스는 06:00 - 22:00에 운영됩니다.\n\n운영시간: 06:00 - 22:00\n투숙객 무료 이용\n\n이용 안내:\n- 인원 추가 시 1인당 55,000원 (만 7세 이상 적용)\n- 인원추가 금액에는 사우나, 피트니스 클럽, 수영장 이용료 포함\n\nFitness Hours: 06:00 - 22:00\nFree for hotel guests"
+  },
+  {
+    "hotel": "lescape",
+    "hotel_name": "레스케이프",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://les.josunhotel.com/facilities/fitness.do",
+    "text": "레스케이프 피트니스 안내\n\nQ: 레스케이프 피트니스(헬스) 운영시간이 어떻게 되나요?\nA: 레스케이프 피트니스는 24시간 운영됩니다.\n\n운영시간: 24시간 (24 Hours)\n위치: 레스케이프 8층\n문의: 02-317-4000\n정비 시간: 12:00, 18:00 (일 2회)\n\n이용 안내:\n- 투숙객 무료 이용\n- 만 16세 이상 입장 가능\n- TECHNOGYM 장비 구비\n- 제공 물품: 물, 수건, 운동화 (대여), 골프채 (대여)\n\nFitness Hours: 24 Hours\nLocation: 8F L'Escape\nMaintenance: 12:00, 18:00 (twice daily)"
+  },
+  {
+    "hotel": "gravity_pangyo",
+    "hotel_name": "그래비티 판교",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://grp.josunhotel.com/about/faq.do",
+    "text": "그래비티 판교 피트니스 안내\n\nQ: 그래비티 판교 피트니스(헬스) 운영시간이 어떻게 되나요?\nA: 그래비티 판교 피트니스는 06:00 - 23:00에 운영됩니다.\n\n운영시간: 06:00 - 23:00\n투숙객 무료 이용\n\nFitness Hours: 06:00 - 23:00\nFree for hotel guests"
+  }
+]

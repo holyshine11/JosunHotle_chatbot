@@ -205,15 +205,32 @@ def answerVerifyNode(state: RAGState) -> dict:
                     print(f"[Fallback 전화번호] chunk에서 전화번호 추출: {phonePatternMatch}")
                     break
 
-        # Phase 4.1c: 일반 chunk 직접 추출
+        # Phase 4.1c: 일반 chunk 직접 추출 (주제 일치 검증 포함)
         if not phonePatternMatch:
             directAnswer = None
             bestUrl = ""
+            queryKeywords = answerVerifier.extractQueryKeywords(query)
             for chunk in chunks[:3]:
                 chunkText = chunk.get("text", "")
                 chunkUrl = chunk.get("metadata", {}).get("url", chunk.get("url", ""))
+                # Fallback 주제 일치 검증: 쿼리 핵심 키워드가 chunk에 존재하는지 확인
+                topicMismatch = False
+                if queryKeywords:
+                    chunkLower = chunkText.lower()
+                    for kw in queryKeywords:
+                        expanded = answerVerifier.CATEGORY_KEYWORD_MAP.get(kw, [kw])
+                        if not any(e.lower() in chunkLower for e in expanded):
+                            topicMismatch = True
+                            print(f"[Fallback 주제 검증] '{kw}' chunk에 없음 → 스킵")
+                            break
+                if topicMismatch:
+                    continue
                 extracted = answerVerifier.extractDirectAnswer(chunkText, query)
                 if extracted and len(extracted) >= 10:
+                    # raw dump 검증: 네비게이션/UI 요소가 포함된 원시 데이터 스킵
+                    if answerVerifier.isRawDump(extracted):
+                        print(f"[Fallback 직접 추출] raw dump 감지 → 스킵: {extracted[:60]}...")
+                        continue
                     directAnswer = extracted
                     bestUrl = chunkUrl
                     break
@@ -297,8 +314,8 @@ def policyFilterNode(state: RAGState) -> dict:
             "final_answer": fallbackAnswer,
         }
 
-    # 최종 안전망
-    errorPatterns = ["[시스템 오류]", "[참조", "검색된 정보:", "일시적인 오류로 답변을 생성하지 못했습니다"]
+    # 최종 안전망 (LLM의 [참조N] 형식은 허용, 시스템 오류 패턴만 차단)
+    errorPatterns = ["[시스템 오류]", "검색된 정보:", "일시적인 오류로 답변을 생성하지 못했습니다"]
     if any(p in answer for p in errorPatterns):
         print(f"[안전망] 답변에 오류 패턴 감지, fallback 교체")
         answer = f"죄송합니다, 일시적인 오류로 답변을 생성하지 못했습니다.\n자세한 사항은 {contactGuide}로 문의 부탁드립니다."

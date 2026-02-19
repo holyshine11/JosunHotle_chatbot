@@ -1,10 +1,34 @@
 [
   {
+    "hotel": "josun_palace",
+    "hotel_name": "조선 팰리스",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://jpg.josunhotel.com/facilities/Sauna.do",
+    "text": "조선 팰리스 수영장 안내\n\nQ: 조선 팰리스 수영장 운영시간이 어떻게 되나요?\nA: 조선 팰리스 수영장은 06:00 - 22:00에 운영됩니다.\n\n수영장 운영시간: 06:00 - 22:00\n위치: 26층 조선 웰니스 클럽\n규모: 25M x 6M\n문의: 02-727-7230\n\n이용 안내:\n- 투숙객 이용 가능\n- 수영복, 수영모 필수 착용\n\nPool Hours: 06:00 - 22:00\nLocation: 26F Josun Wellness Club\nSize: 25M x 6M"
+  },
+  {
     "hotel": "grand_josun_busan",
     "hotel_name": "그랜드 조선 부산",
     "category": "부대시설",
     "page_type": "facilities",
     "url": "https://gjb.josunhotel.com/facilites/pool.do",
     "text": "그랜드 조선 부산 수영장(Heavenly Pool) 안내\n\nQ: 그랜드 조선 부산 수영장 운영시간이 어떻게 되나요?\nA: 그랜드 조선 부산 Heavenly Pool(헤븐리 풀)은 06:00 - 22:00에 운영됩니다.\n\n수영장 운영시간: 06:00 - 22:00\n위치: 6층 (GRAND JOSUN ATHLETIC CLUB)\n입장 인원: 성인 2인, 어린이 2인\n무료 입장: 수영장, 피트니스\n\n피트니스 16세 이상, 사우나 13세 이상 입장 가능\n사우나: 성인 2인 50% 할인\n매월 세 번째 화요일 정기 휴관\n\nPool Hours: 06:00 - 22:00\nLocation: 6F Grand Josun Athletic Club"
+  },
+  {
+    "hotel": "grand_josun_jeju",
+    "hotel_name": "그랜드 조선 제주",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://gjj.josunhotel.com/facilites/gardenpool.do",
+    "text": "그랜드 조선 제주 수영장(Garden Pool) 안내\n\nQ: 그랜드 조선 제주 수영장 운영시간이 어떻게 되나요?\nA: 그랜드 조선 제주에는 Garden Pool, Peak Pool, Heavenly Pool 3개의 수영장이 있습니다.\n\n■ Garden Pool (가든풀)\n운영시간: 09:00 - 21:00 (휴식시간: 13:50 - 14:30)\n위치: 본관 1층\n문의: 064-735-8911\n실내 수영장: 깊이 0.9M, 길이 15M, 너비 8.5M\n야외 수영장: 깊이 1.2M, 길이 18M, 너비 11.7M\n키즈 수영장: 깊이 0.6M, 길이 8.5M, 너비 9.3M\n수온: 5-9월 27-30℃, 10-4월 30-33℃\n\n■ Peak Pool (피크포인트풀)\n운영시간: 10:00 - 22:00 (휴식시간: 13:00 - 14:00)\n위치: 본관 루프탑(R층)\n문의: 064-735-8913\n규모: 깊이 1.4M, 길이 27M, 너비 10.4M\n동계 미운영 (11월 1일~4월 30일)\n만 19세 이상만 이용 가능\n\n■ Heavenly Pool (헤븐리풀)\n운영시간: 09:00 - 21:00\n위치: 힐 스위트관(신관) 6층\n문의: 064-735-8983\n실내 수영장: 깊이 1M, 길이 16.1M, 너비 5.1M\n야외 수영장: 깊이 1.2M, 길이 13M, 너비 5.83M\n힐 스위트 투숙 고객 전용\n\n이용 안내:\n- 체크인 당일 오후 12시부터 체크아웃 당일 15시 이전까지 이용 가능\n- 수영복 필수 착용 (면 의류 불가)\n- 130cm 이하 어린이는 안전조끼 착용 필수\n- 36개월 이하 유아는 방수 기저귀 필수\n- 제공 물품: 비치 타월, 슬리퍼, 구명조끼, 퍼들점퍼\n\nPool Hours: Garden Pool 09:00-21:00, Peak Pool 10:00-22:00, Heavenly Pool 09:00-21:00\nLocation: Main Building 1F (Garden), Rooftop R (Peak), Hill Suite 6F (Heavenly)"
+  },
+  {
+    "hotel": "gravity_pangyo",
+    "hotel_name": "그래비티 판교",
+    "category": "부대시설",
+    "page_type": "facilities",
+    "url": "https://grp.josunhotel.com/fitness/pool.do",
+    "text": "그래비티 판교 수영장(Heavenly Pool) 안내\n\nQ: 그래비티 판교 수영장 운영시간이 어떻게 되나요?\nA: 그래비티 판교 수영장은 06:00 - 22:00에 운영됩니다.\n\n수영장 운영시간: 06:00 - 22:00\n위치: 그래비티 판교 3층\n문의: 031-539-4871\n정기 휴관: 매월 첫째주 수요일\n\n메인 수영장: 깊이 1.03M, 길이 19M, 너비 5.6M\n키즈 수영장: 깊이 0.55M, 길이 8.7M, 너비 3.65M\n\n추가 이용 요금:\n- 성인(12세 이상): 22,000원\n- 어린이(3~12세): 11,000원\n\n이용 안내:\n- 1객실 기준, 1박당 1회 입장 가능 (실 투숙객 한정)\n- 수영복, 수영모 필수 착용\n- 100cm 미만 유아: 방수 기저귀 착용 후 키즈 수영장만 이용 가능\n- 110cm 미만 어린이: 안전용품 착용 필수\n- 정비시간: 11:30, 14:30, 18:30 (각 30분)\n- 제공 물품: 헬퍼, 퍼들점퍼, 비치 타월\n\nPool Hours: 06:00 - 22:00\nLocation: 3F Gravity Seoul Pangyo\nClosed: First Wednesday of each month"
   }
 ]

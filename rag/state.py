@@ -30,6 +30,7 @@ class RAGState(TypedDict):
     # 검색 결과
     retrieved_chunks: list[dict]
     top_score: float
+    rerank_quality: Optional[str]  # 리랭커 품질 신호 (ok/poor/skipped)
 
     # 근거 검증
     evidence_passed: bool

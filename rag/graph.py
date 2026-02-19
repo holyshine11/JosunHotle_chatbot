@@ -166,6 +166,94 @@ class RAGGraph:
         }
 
 
+    def chatWithProgress(self, query: str, hotel: str = None, history: list = None,
+                         sessionCtx=None, progressCallback=None) -> dict:
+        """채팅 실행 (노드별 진행 상황 콜백 포함)
+
+        Args:
+            query: 사용자 질문
+            hotel: 호텔 ID
+            history: 대화 히스토리
+            sessionCtx: 세션 컨텍스트
+            progressCallback: (nodeName: str) -> None, 각 노드 시작 시 호출
+        """
+        pipelineStart = time.time()
+
+        initialState: RAGState = {
+            "query": query,
+            "hotel": hotel,
+            "history": history,
+            "rewritten_query": "",
+            "language": "",
+            "detected_hotel": None,
+            "category": None,
+            "normalized_query": "",
+            "is_valid_query": True,
+            "needs_clarification": False,
+            "clarification_question": "",
+            "clarification_options": [],
+            "clarification_type": None,
+            "retrieved_chunks": [],
+            "top_score": 0.0,
+            "evidence_passed": False,
+            "evidence_reason": "",
+            "answer": "",
+            "sources": [],
+            "verification_passed": True,
+            "verification_issues": [],
+            "verified_answer": "",
+            "grounding_result": None,
+            "query_intents": [],
+            "conversation_topic": None,
+            "effective_category": None,
+            "session_context": sessionCtx,
+            "policy_passed": False,
+            "policy_reason": "",
+            "final_answer": "",
+            "log": {},
+            "_pipeline_start": pipelineStart,
+        }
+
+        # 노드별 스트리밍으로 진행 상황 보고
+        finalState = None
+        for event in self.graph.stream(initialState):
+            nodeName = list(event.keys())[0]
+            finalState = event[nodeName]
+            if progressCallback:
+                progressCallback(nodeName)
+
+        if finalState is None:
+            finalState = initialState
+
+        pipelineElapsed = time.time() - pipelineStart
+        print(f"[타이밍] 전체 파이프라인: {pipelineElapsed:.1f}s")
+
+        # 세션 업데이트
+        if sessionCtx:
+            detectedTopic = finalState.get("category") or finalState.get("conversation_topic")
+            sessionCtx.updateTopic(detectedTopic, finalState.get("detected_hotel"))
+            sessionCtx.cacheChunks(
+                finalState.get("retrieved_chunks", []),
+                query
+            )
+
+        return {
+            "answer": finalState.get("final_answer", ""),
+            "hotel": finalState.get("detected_hotel"),
+            "category": finalState.get("category"),
+            "evidence_passed": finalState.get("evidence_passed", False),
+            "verification_passed": finalState.get("verification_passed", True),
+            "sources": finalState.get("sources", []),
+            "score": finalState.get("top_score", 0),
+            "needs_clarification": finalState.get("needs_clarification", False),
+            "clarification_question": finalState.get("clarification_question", ""),
+            "clarification_options": finalState.get("clarification_options", []),
+            "clarification_type": finalState.get("clarification_type"),
+            "clarification_subject": finalState.get("clarification_subject"),
+            "original_query": query,
+        }
+
+
 def createRAGGraph():
     """RAG 그래프 생성 헬퍼"""
     import sys

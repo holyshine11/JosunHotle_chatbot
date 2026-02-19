@@ -376,9 +376,10 @@ class Indexer:
             # 최종 점수 = 벡터 점수 + BM25 부스트 (최대 1.0)
             finalScore = min(vectorScore + bm25Boost, 1.0)
 
-            # 벡터 결과가 없는 경우 BM25 점수 사용 (패널티 적용)
+            # 벡터 결과가 없는 경우 BM25 점수 사용 (강화된 패널티)
+            # BM25만으로는 의미(시맨틱) 검색 불가 → 보수적 점수 부여
             if vectorScore == 0:
-                finalScore = bm25Score * 0.7  # BM25 전용 결과는 30% 패널티
+                finalScore = bm25Score * 0.55  # BM25 전용 결과는 45% 패널티
 
             data["final_score"] = finalScore
 

@@ -16,11 +16,27 @@
     "text": "그랜드 조선 부산 조식 안내\n\nQ: 그랜드 조선 부산 조식(아침식사) 운영시간이 어떻게 되나요?\nA: 그랜드 조선 부산 조식은 아리아(Aria) 레스토랑에서 06:30 - 10:00에 운영됩니다.\n\n조식 시간: 06:30 - 10:00 (매일)\n위치: 그랜드 조선 부산 2층 아리아(Aria)\n문의: 051-922-5050, 5051\n\n조식 가격:\n- 성인: 63,000원\n- 어린이(49개월~12세): 37,000원\n\n조식 예약은 별도로 제공하지 않으며 객실 투숙객만 이용 가능합니다.\n\nBreakfast Hours: 06:30 - 10:00\nLocation: 2F Aria Restaurant\nAdult: 63,000 KRW / Children: 37,000 KRW"
   },
   {
+    "hotel": "grand_josun_jeju",
+    "hotel_name": "그랜드 조선 제주",
+    "category": "조식",
+    "page_type": "dining",
+    "url": "https://gjj.josunhotel.com/dining/aria.do",
+    "text": "그랜드 조선 제주 조식 안내\n\nQ: 그랜드 조선 제주 조식(아침식사) 운영시간이 어떻게 되나요?\nA: 그랜드 조선 제주 조식은 아리아(Aria) 레스토랑에서 07:00 - 10:30에 운영됩니다.\n\n조식 시간: 07:00 - 10:30 (매일)\n위치: 그랜드 조선 제주 본관 1층 아리아(Aria)\n문의: 064-735-8989, 8990\n좌석 수: 총 280석(PDR 52석 포함)\n\n조식 가격:\n- 성인: 70,000원\n- 어린이(7세~12세): 38,000원\n- 유아(37개월~6세): 38,000원\n- 36개월 미만: 무료\n\n투숙객 10% 할인 적용 시: 성인 63,000원, 소인 34,200원\n\n아리아는 제주 로컬 식재료를 활용한 프리미엄 뷔페 레스토랑으로, 조선호텔 아리아의 노하우가 담긴 시그니처 메뉴를 제공합니다.\n\nBreakfast Hours: 07:00 - 10:30\nLocation: Main Building 1F Aria Restaurant\nAdult: 70,000 KRW / Children(7-12): 38,000 KRW / Infant(37months-6): 38,000 KRW"
+  },
+  {
     "hotel": "gravity_pangyo",
     "hotel_name": "그래비티 판교",
     "category": "조식",
     "page_type": "dining",
     "url": "https://grp.josunhotel.com/dining/andish.do",
     "text": "그래비티 판교 조식 안내\n\nQ: 그래비티 판교 조식(아침식사) 운영시간이 어떻게 되나요?\nA: 그래비티 판교 조식은 앤디쉬(Andish) 뷔페 레스토랑에서 06:30 - 10:00에 운영됩니다.\n\n조식 시간: 06:30 - 10:00\n위치: 그래비티 조선 서울 판교 2층 앤디쉬(Andish)\n문의: 031-539-4820\n좌석 수: 총 146석\n\n앤디쉬는 전문 셰프가 다양하게 준비한 라이브 쿠킹 스테이션 요리와 함께 조식, 런치, 디너를 제공합니다.\n\nBreakfast Hours: 06:30 - 10:00\nLocation: 2F Andish Buffet Restaurant\nContact: 031-539-4820"
+  },
+  {
+    "hotel": "lescape",
+    "hotel_name": "레스케이프",
+    "category": "조식",
+    "page_type": "dining",
+    "url": "https://les.josunhotel.com/facilities/lounge.do",
+    "text": "레스케이프 조식 안내\n\nQ: 레스케이프 조식(아침식사) 운영시간이 어떻게 되나요?\nA: 레스케이프 조식은 7층 La Maison Boutique(라메종 부티크)에서 07:00 - 10:30에 세미 뷔페로 운영됩니다.\n\n조식 시간: 07:00 - 10:30\n위치: 레스케이프 7층 La Maison Boutique\n형태: 세미 뷔페 (라이브 스테이션)\n문의: 02-317-4000\n\n조식 가격:\n- 성인 (12세 이상): 55,000원\n- 어린이 (7세~12세): 27,500원\n\n메뉴: 즉석 딤섬, 스페셜 누들, 계란 요리, 양식, 한식, 중식, 프렌치 스타일 베이커리 등\n인 룸 다이닝으로는 제공되지 않습니다.\n\nBreakfast Hours: 07:00 - 10:30\nLocation: 7F La Maison Boutique\nAdult: 55,000 KRW / Children(7-12): 27,500 KRW"
   }
 ]

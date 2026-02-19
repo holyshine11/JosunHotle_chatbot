@@ -14,6 +14,101 @@ from rag.constants import (
 )
 
 
+def _tryRuleBasedRewrite(query: str, history: list) -> Optional[str]:
+    """규칙 기반 쿼리 재작성: 단순 후속 질문은 LLM 호출 없이 재작성.
+
+    대상 패턴:
+    - "거기 X은?" → 이전 대화 시설/호텔 + X
+    - "몇 시에 열어?", "얼마야?" → 이전 대화 주체 + 질문
+    - "그럼 X는?" → 이전 대화 호텔 + X 명시
+
+    Returns:
+        재작성된 쿼리 또는 None (규칙 적용 불가)
+    """
+    if not history:
+        return None
+
+    queryStrip = query.strip()
+
+    # 이전 assistant 답변에서 호텔명/시설명 추출
+    prevSubject = None
+    prevHotel = None
+    for msg in reversed(history):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            # 호텔명 추출 ([] 안의 호텔명)
+            hotelMatch = re.search(r'\[([^\]]*(?:팰리스|부산|제주|레스케이프|그래비티)[^\]]*)\]', content)
+            if hotelMatch:
+                prevHotel = hotelMatch.group(1)
+            # 시설명 추출 (레스토랑, 수영장, 피트니스 등 핵심 시설)
+            facilityPatterns = [
+                r'([\w가-힣]+\s*(?:레스토랑|식당|카페|바|라운지|뷔페|다이닝))',
+                r'((?:수영장|풀|피트니스|헬스|사우나|스파|키즈클럽|비즈니스\s*센터))',
+                r'((?:조식|석식|런치|디너|브런치))',
+            ]
+            for fp in facilityPatterns:
+                m = re.search(fp, content)
+                if m:
+                    prevSubject = m.group(1).strip()
+                    break
+            if prevSubject:
+                break
+        elif msg.get("role") == "user":
+            # 이전 사용자 질문에서도 주체 추출
+            userContent = msg.get("content", "")
+            for fp in [
+                r'([\w가-힣]+\s*(?:레스토랑|식당|카페|바|라운지|뷔페|다이닝))',
+                r'((?:수영장|풀|피트니스|헬스|사우나|스파|키즈클럽))',
+                r'((?:조식|석식|런치|디너|브런치))',
+            ]:
+                m = re.search(fp, userContent)
+                if m:
+                    prevSubject = m.group(1).strip()
+                    break
+            if prevSubject:
+                break
+
+    if not prevSubject and not prevHotel:
+        return None
+
+    subject = prevSubject or prevHotel or ""
+
+    # 패턴 1: "거기 X은/는?" → 호텔(장소) + X ("거기"는 장소 지시어이므로 호텔 우선)
+    m = re.match(r'^거기\s+(.+)', queryStrip)
+    if m:
+        placeSubject = prevHotel or prevSubject or ""
+        return f"{placeSubject} {m.group(1)}"
+
+    # 패턴 2: "그럼 X는/은?" → 호텔 + X
+    m = re.match(r'^그럼\s+(.+)', queryStrip)
+    if m:
+        rest = m.group(1)
+        if prevHotel:
+            return f"{prevHotel} {rest}"
+        return f"{subject} {rest}"
+
+    # 패턴 3: "그러면 X" → 호텔 + X
+    m = re.match(r'^그러면\s+(.+)', queryStrip)
+    if m:
+        if prevHotel:
+            return f"{prevHotel} {m.group(1)}"
+        return f"{subject} {m.group(1)}"
+
+    # 패턴 4: 짧은 후속 질문 (시간/가격/위치 등)
+    shortPatterns = [
+        (r'^몇\s*시.*', f"{subject} 운영시간"),
+        (r'^얼마.*', f"{subject} 가격"),
+        (r'^어디.*', f"{subject} 위치"),
+        (r'^언제.*', f"{subject} 운영시간"),
+        (r'^예약.*', f"{subject} 예약 방법"),
+    ]
+    for pattern, rewritten in shortPatterns:
+        if re.match(pattern, queryStrip):
+            return rewritten
+
+    return None
+
+
 def queryRewriteNode(state: RAGState) -> dict:
     """쿼리 재작성 노드: 대화 맥락을 반영하여 질문을 완전한 형태로 재작성"""
     _start = time.time()
@@ -66,6 +161,16 @@ def queryRewriteNode(state: RAGState) -> dict:
             "rewritten_query": query,
         }
 
+    # === 규칙 기반 재작성 시도 (LLM 호출 없이 5-8s 절약) ===
+    ruleResult = _tryRuleBasedRewrite(query, history)
+    if ruleResult:
+        _elapsed = time.time() - _start
+        print(f"[쿼리 재작성] 규칙 기반: '{query}' → '{ruleResult}' ({_elapsed:.3f}s, LLM 스킵)")
+        return {
+            **state,
+            "rewritten_query": ruleResult,
+        }
+
     # === 주제 전환 감지: 현재 질문이 이전 대화와 다른 주제면 재작성 차단 ===
     topicGroups = {
         "객실": ["객실", "방", "룸", "room", "suite", "스위트", "디럭스", "키즈룸"],
@@ -109,58 +214,52 @@ def queryRewriteNode(state: RAGState) -> dict:
                         historyTopics.add(topic)
 
         # 현재 주제가 히스토리에 없으면 → 주제 전환, 재작성 불필요
-        if historyTopics and currentTopic not in historyTopics:
+        # 히스토리에서 주제 키워드를 추출할 수 없어도 (빈 set) 현재 쿼리에
+        # 명확한 주제가 있으면 자체 완결형이므로 재작성 건너뜀
+        if not historyTopics or currentTopic not in historyTopics:
             print(f"[주제 전환 감지] 히스토리 '{historyTopics}' → 현재 '{currentTopic}', 재작성 건너뜀")
             return {
                 **state,
                 "rewritten_query": query,
             }
 
-    # 최근 대화 맥락 구성 (최대 3턴)
-    recentHistory = history[-6:] if len(history) > 6 else history  # Q&A 각각이므로 6개 = 3턴
+        # 같은 주제 follow-up이지만 쿼리에 이미 구체적 시설/서비스명이 있으면 자체 완결형
+        # 예: "피트니스는 몇시에 문을 열어?" → "피트니스" 포함 → 재작성 불필요
+        # LLM 재작성이 오히려 무관한 맥락을 주입하여 검색 품질을 저하시키는 것을 방지
+        topicKeywordsInQuery = [kw for kw in topicGroups[currentTopic] if kw in queryLower]
+        if topicKeywordsInQuery:
+            print(f"[자체 완결] '{query}' → 주제 키워드 '{topicKeywordsInQuery[0]}' 포함, 재작성 건너뜀")
+            return {
+                **state,
+                "rewritten_query": query,
+            }
+
+    # 최근 대화 맥락 구성 (최대 2턴 = 4메시지, 입력 토큰 절약)
+    recentHistory = history[-4:] if len(history) > 4 else history
 
     historyText = ""
     for msg in recentHistory:
-        role = "사용자" if msg.get("role") == "user" else "챗봇"
-        content = msg.get("content", "")[:200]  # 너무 긴 내용 자르기
+        role = "Q" if msg.get("role") == "user" else "A"
+        content = msg.get("content", "")[:150]  # 짧게 자르기
         historyText += f"{role}: {content}\n"
 
-    # LLM으로 쿼리 재작성
-    rewritePrompt = f"""당신은 대화 맥락을 이해하여 질문을 재작성하는 전문가입니다.
-
-[이전 대화]
+    # LLM으로 쿼리 재작성 (경량화 프롬프트 + 시스템 한국어 강제)
+    rewriteSystem = "한국어 질문 재작성 전문가. 반드시 한국어로만 응답. 질문 1문장만 출력."
+    rewritePrompt = f"""[대화]
 {historyText}
+[현재 질문] {query}
 
-[현재 질문]
-{query}
-
-[작업]
-현재 질문이 이전 대화의 맥락을 참조하는 경우, 맥락을 포함한 완전한 질문으로 재작성하세요.
-- 이전 대화에서 언급된 주제(장소, 물건, 서비스 등)를 명시적으로 포함
-- 질문의 의도를 명확하게 유지
-- 재작성이 필요 없으면 원본 질문 그대로 출력
-
-[중요 규칙]
-- 현재 질문이 이전 대화와 완전히 다른 주제(예: 이전에 교통편→지금 객실)면 절대 이전 맥락을 섞지 마세요
-- 현재 질문에 이전 대화에 없던 새로운 고유명사(인물명, 브랜드명)가 등장하면, 이전 맥락과 무관한 새 질문으로 처리하세요
-- 이전 대화 내용을 답변에 포함하지 마세요. 질문만 재작성하세요
-- 교통편, 지하철 노선, 버스 번호 등의 구체적 정보를 질문에 추가하지 마세요
-
-[재작성된 질문]"""
+이전 대화의 주제(장소/서비스명)를 포함하여 완전한 질문으로 재작성하세요. 다른 주제면 원본 유지.
+재작성:"""
 
     try:
-        # LLM Provider를 통한 쿼리 재작성 (maxTokens=100 으로 제한)
-        try:
-            rewrittenQuery = callLLM(
-                prompt=rewritePrompt,
-                temperature=0.0,
-                maxTokens=100
-            ).strip()
-        except TypeError:
-            rewrittenQuery = callLLM(
-                prompt=rewritePrompt,
-                temperature=0.0
-            ).strip()
+        rewrittenQuery = callLLM(
+            prompt=rewritePrompt,
+            system=rewriteSystem,
+            temperature=0.0,
+            maxTokens=60,
+            numCtx=1024  # 입력 짧음, KV캐시 75% 절감
+        ).strip()
 
         # 빈 응답이나 너무 긴 응답 방지
         if not rewrittenQuery or len(rewrittenQuery) > 200:
@@ -263,7 +362,9 @@ def preprocessNode(state: RAGState) -> dict:
         isValidQuery = hasValidKeyword
 
     # 레스토랑 엔티티 추출 및 호텔 맥락 검증
-    entityResult = extractRestaurantEntity(query, detectedHotel)
+    # 원본 쿼리 사용: LLM 재작성 시 히스토리 레스토랑명 주입으로 인한 오탐 방지
+    originalQueryForEntity = state.get("query", "").strip()
+    entityResult = extractRestaurantEntity(originalQueryForEntity, detectedHotel)
     restaurantRedirectMsg = None
 
     if entityResult["action"] == "redirect":

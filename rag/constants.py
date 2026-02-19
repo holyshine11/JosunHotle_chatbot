@@ -319,58 +319,211 @@ CATEGORY_KEYWORDS = {
     ],
 }
 
-# 동의어 사전 (쿼리 확장용)
-SYNONYM_DICT = {
-    # 반려동물
-    "강아지": ["반려견", "pet", "개", "펫", "반려동물", "애견", "소형견"],
-    "반려견": ["강아지", "pet", "개", "펫", "반려동물", "애견"],
-    "펫": ["pet", "반려견", "강아지", "반려동물"],
-    "pet": ["펫", "반려견", "강아지", "반려동물"],
-    "펫동반": ["펫 동반", "반려동물동반", "반려동물 동반", "동물동반", "pet friendly", "pet-friendly"],
+# 동의어 사전 (쿼리 확장용) - 동의어 = 같은 것의 다른 표현만 등록
+_RAW_SYNONYM_DICT = {
+    # ===== 1. 숙박/체크인 =====
+    "체크인": ["check-in", "checkin", "입실", "체크인시간"],
+    "체크아웃": ["check-out", "checkout", "퇴실", "체크아웃시간"],
+    "얼리체크인": ["early check-in", "조기입실", "빠른입실", "이른체크인"],
+    "레이트체크아웃": ["late check-out", "늦은퇴실", "늦퇴실", "연장체크아웃"],
+    "데이유즈": ["day use", "데이유스", "당일사용", "당일이용"],
+    "연박": ["연박할인", "장기투숙", "롱스테이", "long stay"],
+    "투숙": ["숙박", "stay", "묵다", "머무르다"],
 
-    # 주차
-    "주차": ["parking", "발렛", "valet", "파킹", "자가용"],
-    "발렛": ["valet", "주차", "발렛파킹", "발레", "대리주차"],
-    "주차요금": ["주차 요금", "parking fee", "parking cost", "주차비"],
+    # ===== 2. 객실/등급 =====
+    "스위트": ["suite", "스위트룸", "suite room"],
+    "디럭스": ["deluxe", "디럭스룸", "deluxe room"],
+    "프리미어": ["premier", "프리미어룸", "premier room"],
+    "슈페리어": ["superior", "슈페리어룸", "superior room"],
+    "스탠다드": ["standard", "스탠다드룸", "standard room"],
+    "객실": ["room", "방", "룸", "숙소"],
+    "업그레이드": ["upgrade", "업글", "객실업그레이드"],
+    "커넥팅룸": ["connecting room", "커넥팅", "연결객실", "인접객실", "adjoining"],
 
-    # 수영장
-    "수영장": ["pool", "풀", "swimming", "인피니티풀", "swimming pool", "인피니티 풀"],
-
-    # 조식/다이닝
-    "조식": ["breakfast", "아침", "뷔페", "아침식사", "모닝", "morning buffet"],
-    "아침": ["breakfast", "조식", "아침식사"],
-    "애프터눈티": ["afternoon tea", "티세트", "티 세트", "하이티", "high tea"],
-    "라스트오더": ["last order", "LO", "주문마감", "주문 마감"],
-
-    # 스파/웰니스
-    "스파": ["spa", "마사지", "웰니스", "massage", "wellness", "SWISS PERFECTION"],
-    "마사지": ["massage", "스파", "spa", "웰니스"],
-    "사우나": ["sauna", "스파", "스팀", "steam", "찜질"],
-
-    # 피트니스
-    "피트니스": ["fitness", "헬스", "gym", "운동", "운동시설", "트레이닝룸"],
-    "헬스": ["fitness", "피트니스", "gym", "헬스장"],
-
-    # 체크인/아웃
-    "체크인": ["check-in", "입실", "checkin"],
-    "체크아웃": ["check-out", "퇴실", "checkout"],
-    "얼리체크인": ["early check-in", "early check in", "조기입실", "빠른입실", "이른체크인"],
-    "레이트체크아웃": ["late check-out", "late check out", "늦은퇴실", "늦퇴실", "연장체크아웃"],
-
-    # 결제/증빙
-    "영수증": ["영수증발급", "증빙", "증빙서류", "인보이스", "invoice", "세금계산서", "세금 계산서"],
-    "디파짓": ["보증금", "deposit", "preauth", "pre-authorization", "보증"],
-
-    # 객실/침구
-    "엑스트라베드": ["extra bed", "침대추가", "침대 추가", "보조침대", "보조 침대"],
+    # ===== 3. 객실 침구/뷰 =====
+    "엑스트라베드": ["extra bed", "침대추가", "보조침대", "추가침대"],
     "아기침대": ["baby cot", "cot", "crib", "유아침대", "베이비침대", "크립"],
-    "기준인원": ["기준 인원", "standard occupancy", "base occupancy"],
-    "최대인원": ["최대 인원", "max occupancy", "maximum occupancy"],
+    "킹베드": ["king bed", "킹사이즈", "king size"],
+    "트윈베드": ["twin bed", "트윈", "twin"],
+    "오션뷰": ["ocean view", "씨뷰", "시뷰", "sea view", "바다뷰", "바다전망"],
+    "시티뷰": ["city view", "도시전망", "도심뷰"],
+    "가든뷰": ["garden view", "정원뷰", "정원전망"],
+    "마운틴뷰": ["mountain view", "산뷰", "산전망"],
+    "기준인원": ["standard occupancy", "기준 인원", "기본인원"],
+    "최대인원": ["max occupancy", "최대 인원", "최대수용"],
+    "추가인원": ["추가 인원", "인원추가", "extra person", "extra guest"],
 
-    # 뷰
-    "오션뷰": ["오션 뷰", "씨뷰", "시뷰", "sea view", "ocean view"],
-    "시티뷰": ["시티 뷰", "도시전망", "city view"],
+    # ===== 4. 수영장 =====
+    "수영장": ["pool", "풀", "swimming pool", "swimming", "실내풀", "야외풀"],
+    "인피니티풀": ["infinity pool", "인피니티 풀", "루프탑풀"],
+    "키즈풀": ["kids pool", "어린이풀", "유아풀", "어린이수영장"],
+    "수영복": ["swimsuit", "수영 복", "수영옷"],
+    "수영모": ["swim cap", "수모", "수영캡"],
+    "카바나": ["cabana", "풀사이드", "poolside"],
+    "워터슬라이드": ["water slide", "워터 슬라이드", "미끄럼틀"],
+
+    # ===== 5. 사우나 =====
+    "사우나": ["sauna", "찜질", "한증", "찜질방", "건식사우나", "습식사우나"],
+    "스팀": ["steam", "스팀룸", "steam room", "습식"],
+    "온탕": ["hot bath", "뜨거운물", "열탕"],
+    "냉탕": ["cold bath", "찬물", "냉수"],
+
+    # ===== 6. 스파/웰니스 =====
+    "스파": ["spa", "웰니스", "wellness", "트리트먼트", "treatment"],
+    "마사지": ["massage", "테라피", "therapy", "바디케어"],
+    "세신": ["body scrub", "바디스크럽", "때밀이"],
+
+    # ===== 7. 피트니스 =====
+    "피트니스": ["fitness", "헬스", "gym", "체련장", "운동시설", "fitness center"],
+    "헬스": ["health club", "피트니스", "gym", "헬스장", "헬스클럽"],
+    "체련장": ["fitness", "피트니스", "운동시설", "gym"],
+    "운동복": ["workout clothes", "트레이닝복", "운동 복"],
+    "운동화": ["athletic shoes", "스니커즈", "운동 화"],
+
+    # ===== 8. 라운지 =====
+    "라운지": ["lounge", "클럽라운지", "club lounge"],
+    "이그제큐티브라운지": ["executive lounge", "이그제큐티브 라운지", "비즈니스라운지"],
+    "그랑제이": ["Gran J", "그랑 제이", "프라이빗라운지", "프라이빗 라운지"],
+    "로비": ["lobby", "로비라운지", "프론트"],
+    "리셉션": ["reception", "프론트데스크", "front desk", "안내데스크"],
+
+    # ===== 9. 키즈/어린이 =====
+    "키즈": ["kids", "어린이", "아이", "유아", "아동"],
+    "키즈클럽": ["kids club", "키즈 클럽", "어린이클럽", "놀이방", "키즈룸"],
+    "키즈프로그램": ["kids program", "어린이프로그램", "어린이 프로그램"],
+    "유모차": ["stroller", "baby stroller", "유모 차"],
+
+    # ===== 10. 연회/웨딩 =====
+    "연회장": ["banquet hall", "연회", "banquet", "행사장"],
+    "볼룸": ["ballroom", "볼 룸", "대연회장", "그랜드볼룸"],
+    "웨딩": ["wedding", "결혼식", "예식", "웨딩홀", "결혼"],
+
+    # ===== 11. 비즈니스 =====
+    "비즈니스센터": ["business center", "비즈니스 센터", "업무공간"],
+    "회의실": ["meeting room", "미팅룸", "conference room", "세미나실"],
+    "프린트": ["print", "인쇄", "프린터", "복사"],
+    "팩스": ["fax", "팩시밀리"],
+
+    # ===== 12. 조식/식사시간 =====
+    "조식": ["breakfast", "아침식사", "아침", "모닝", "BREAKFAST", "morning"],
+    "중식": ["lunch", "점심", "런치", "LUNCH"],
+    "석식": ["dinner", "저녁", "디너", "DINNER", "저녁식사"],
+    "브런치": ["brunch", "브런치뷔페", "주말브런치"],
+    "뷔페": ["buffet", "뷔페레스토랑", "부페"],
+    "코스요리": ["course", "코스", "풀코스", "full course"],
+
+    # ===== 13. 다이닝/레스토랑 =====
+    "레스토랑": ["restaurant", "식당", "음식점"],
+    "다이닝": ["dining", "식사", "레스토랑"],
+    "카페": ["cafe", "커피숍", "커피", "coffee"],
+    "베이커리": ["bakery", "빵집", "제과"],
+    "라운지바": ["lounge bar", "라운지 바", "호텔바"],
+    "바": ["bar", "주류", "와인바"],
+    "룸서비스": ["room service", "인룸다이닝", "in-room dining", "객실서비스"],
+
+    # ===== 14. 레스토랑 고유명사 (한↔영) =====
+    "아리아": ["aria", "Aria"],
+    "콘스탄스": ["constans", "Constans"],
+    "홍연": ["HongYuan", "홍위안", "중식당"],
+    "팔레드신": ["Palais de Chine", "팔레 드 신", "팔레"],
+    "잇투오": ["Eat2O", "eat2o", "이투오"],
+    "피크포인트": ["Peak Point", "피크 포인트"],
+    "라망시크레": ["La Maison Secrete", "라망 시크레"],
+    "마크다모르": ["Marc d'Amour", "마크 다모르"],
+    "앤디쉬": ["Andish", "andish"],
+    "제로비티": ["Zerovity", "zerovity"],
+    "부스트": ["Voost", "voost"],
+    "테라스292": ["Terrace 292", "테라스 292"],
+    "조선델리": ["Josun Deli", "조선 델리"],
+    "이타닉": ["Eatanic", "이타닉가든", "Eatanic Garden"],
+    "1914": ["일구일사", "1914레스토랑"],
+    "헤븐리라운지": ["Heavenly Lounge", "헤븐리 라운지"],
+    "티살롱": ["Tea Salon", "티 살롱"],
+    "스위스퍼펙션": ["Swiss Perfection", "스위스 퍼펙션"],
+
+    # ===== 15. 음식/음료 =====
+    "애프터눈티": ["afternoon tea", "티세트", "하이티", "high tea"],
+    "콜키지": ["corkage", "와인반입", "주류반입", "와인 반입"],
+    "라스트오더": ["last order", "LO", "주문마감", "마감시간"],
+    "디저트": ["dessert", "후식", "케이크", "스위트"],
+    "채식": ["vegetarian", "비건", "vegan", "채식주의"],
+    "할랄": ["halal", "할랄음식"],
+    "알레르기": ["allergy", "알러지", "식품알레르기"],
+    "드레스코드": ["dress code", "복장규정", "복장"],
+
+    # ===== 16. 주차/교통 =====
+    "주차": ["parking", "파킹", "주차장"],
+    "발렛": ["valet", "발렛파킹", "대리주차", "valet parking"],
+    "주차요금": ["parking fee", "주차비", "주차 요금", "parking cost"],
+    "셔틀": ["shuttle", "셔틀버스", "shuttle bus"],
+    "리무진": ["limousine", "공항리무진", "airport limousine"],
+    "픽업": ["pickup", "픽업서비스", "pick up"],
+
+    # ===== 17. 반려동물 =====
+    "반려동물": ["pet", "펫", "애완동물", "반려"],
+    "강아지": ["dog", "반려견", "애견", "소형견", "펫"],
+    "펫동반": ["pet friendly", "반려동물동반", "동물동반", "pet-friendly"],
+
+    # ===== 18. 서비스 =====
+    "세탁": ["laundry", "드라이클리닝", "dry cleaning", "클리닝"],
+    "컨시어지": ["concierge", "안내데스크", "도움"],
+    "어메니티": ["amenity", "amenities", "비품", "용품", "세면도구"],
+    "미니바": ["minibar", "mini bar", "냉장고", "객실냉장고"],
+    "금고": ["safe", "세이프", "객실금고", "귀중품보관"],
+    "모닝콜": ["wake-up call", "기상알림", "알람", "wake up"],
+    "턴다운": ["turndown", "turn down", "턴다운서비스"],
+    "짐보관": ["luggage storage", "수하물보관", "짐맡기기", "캐리어보관"],
+    "와이파이": ["wifi", "wi-fi", "인터넷", "internet", "무선인터넷"],
+
+    # ===== 19. 예약/결제 =====
+    "예약": ["reservation", "booking", "부킹", "리저베이션"],
+    "취소": ["cancel", "cancellation", "예약취소"],
+    "환불": ["refund", "환불규정", "취소환불"],
+    "노쇼": ["no-show", "noshow", "no show"],
+    "디파짓": ["deposit", "보증금", "선결제", "preauth"],
+    "영수증": ["receipt", "인보이스", "invoice", "증빙", "세금계산서"],
+    "카드결제": ["card payment", "신용카드", "credit card"],
+
+    # ===== 20. 위치/접근성 =====
+    "위치": ["location", "주소", "address", "어디", "장소"],
+    "찾아가는길": ["directions", "오시는길", "교통편", "가는법"],
+    "지하철": ["subway", "metro", "전철", "역"],
+
+    # ===== 21. 특수 요청 =====
+    "생일": ["birthday", "생일축하", "생일케이크"],
+    "기념일": ["anniversary", "기념일축하", "기념"],
+    "프로포즈": ["propose", "프러포즈", "청혼"],
+    "허니문": ["honeymoon", "신혼여행", "허니문패키지"],
+    "촬영": ["photo", "사진", "포토", "촬영가능"],
+
+    # ===== 22. 패키지/이벤트 =====
+    "패키지": ["package", "패키지상품", "숙박패키지", "특가"],
+    "프로모션": ["promotion", "이벤트", "할인", "시즌"],
+    "액티비티": ["activity", "체험", "프로그램", "활동"],
+
+    # ===== 23. 정책/이용규정 =====
+    "휴무": ["closed", "휴관", "정기휴무", "쉬는날"],
+    "운영시간": ["operating hours", "이용시간", "오픈시간", "영업시간", "hours"],
+    "이용안내": ["usage guide", "이용규정", "이용방법", "이용법"],
+    "문의": ["contact", "연락처", "전화", "전화번호", "tel"],
 }
+
+
+def _normalizeSynonymDict(rawDict):
+    """A→B 매핑 있으면 B→A 자동 추가. 비대칭 원천 방지."""
+    normalized = {}
+    for term, synonyms in rawDict.items():
+        normalized.setdefault(term, [])
+        for s in synonyms:
+            if s not in normalized[term]:
+                normalized[term].append(s)
+            normalized.setdefault(s, [])
+            if term not in normalized[s]:
+                normalized[s].append(term)
+    return normalized
+
+
+SYNONYM_DICT = _normalizeSynonymDict(_RAW_SYNONYM_DICT)
 
 # 금지 키워드 (정책 필터)
 FORBIDDEN_KEYWORDS = [

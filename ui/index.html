@@ -174,7 +174,7 @@
     }
 
     // SSE 스트리밍 API 호출
-    async function callAPIStream(hotelId, message, history = [], onToken, onStatus) {
+    async function callAPIStream(hotelId, message, history = [], onToken, onStatus, onReplace) {
       const response = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,49 +186,75 @@
       const decoder = new TextDecoder();
       let result = {};
       let buffer = '';
+      let resolved = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
+      return new Promise((resolve, reject) => {
+        (async () => {
           try {
-            const data = JSON.parse(line.slice(6));
-            switch (data.event) {
-              case 'status':
-                if (onStatus) onStatus(data.message);
-                break;
-              case 'token':
-                if (onToken) onToken(data.text);
-                break;
-              case 'clarification':
-                result = {
-                  answer: data.answer,
-                  needsClarification: true,
-                  clarificationOptions: data.options,
-                  clarificationType: data.type,
-                  originalQuery: data.originalQuery
-                };
-                break;
-              case 'done':
-                result.sources = data.sources;
-                result.score = data.score;
-                if (data.sessionId) state.sessionId = data.sessionId;
-                break;
-              case 'error':
-                throw new Error(data.message);
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop();
+
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  switch (data.event) {
+                    case 'status':
+                      if (onStatus) onStatus(data.message);
+                      break;
+                    case 'token':
+                      if (onToken) onToken(data.text);
+                      break;
+                    case 'replace':
+                      // 검증 후 답변이 변경됨 → 스트리밍 텍스트 초기화
+                      if (onReplace) onReplace();
+                      break;
+                    case 'clarification':
+                      result = {
+                        answer: data.answer,
+                        needsClarification: true,
+                        clarificationOptions: data.options,
+                        clarificationType: data.type,
+                        originalQuery: data.originalQuery
+                      };
+                      break;
+                    case 'done':
+                      result.answer = data.answer || null;
+                      result.sources = data.sources;
+                      result.score = data.score;
+                      if (data.sessionId) state.sessionId = data.sessionId;
+                      if (!resolved) {
+                        resolved = true;
+                        resolve(result);
+                      }
+                      try { reader.cancel(); } catch(e) {}
+                      return;
+                    case 'error':
+                      throw new Error(data.message);
+                  }
+                } catch (e) {
+                  if (e.message && e.message.includes('오류가 발생')) throw e;
+                }
+              }
             }
-          } catch (e) {
-            if (e.message && e.message.includes('오류가 발생')) throw e;
+            // 스트림 자연 종료 (done 없이 끝난 edge case)
+            if (!resolved) {
+              resolved = true;
+              resolve(result);
+            }
+          } catch (err) {
+            if (!resolved) {
+              resolved = true;
+              reject(err);
+            }
           }
-        }
-      }
-      return result;
+        })();
+      });
     }
 
     // 대화 히스토리 추출 (최근 6개 메시지 = 3턴)
@@ -438,10 +464,12 @@
       const isTtsLoading = typeof TTSEngine !== 'undefined' && TTSEngine._state === 'loading';
       const isTtsPlaying = typeof TTSEngine !== 'undefined' && TTSEngine._state === 'playing';
       const avatarSrc = isTtsPlaying ? '/static/bell_boy_play.gif'
-        : (isThinking || isTtsLoading) ? '/static/bell_boy_Thinking.gif'
+        : isThinking ? '/static/bell_boy_Thinking.gif'
+        : isTtsLoading ? '/static/bell_boy_play.gif'
         : '/static/bell_boy.gif';
       const speakingClass = isTtsPlaying ? 'avatar-speaking'
-        : (isThinking || isTtsLoading) ? 'avatar-thinking' : '';
+        : isThinking ? 'avatar-thinking'
+        : isTtsLoading ? 'avatar-speaking' : '';
       const hotelName = state.currentHotel ? state.currentHotel.name : '';
 
       return `
@@ -481,7 +509,8 @@
             <div class="max-w-[85%] sm:max-w-[80%] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-bl-sm px-4 sm:px-5 py-3 sm:py-4 shadow-sm">
               <p class="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-2 sm:mb-3 flex items-center gap-2">
                 <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-                <span class="thinking-status">생각중(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)...</span>
+                <span class="thinking-status-text">질문을 분석하고 있습니다...</span>
+                <span class="thinking-timer-wrap">(<span id="thinking-timer">${String(elapsed).padStart(2, '0')}</span>s)</span>
               </p>
               <div class="markdown-content space-y-2 sm:space-y-3">
                 <div class="skeleton-line h-4 sm:h-5 bg-gray-200 dark:bg-slate-700 rounded w-64 sm:w-72"></div>
@@ -699,34 +728,48 @@
 
         const onToken = (text) => {
           streamedText += text;
+          // [REF:N] 태그 숨김 (서버 후처리에서 제거됨)
+          const displayText = streamedText.replace(/\s*\[REF:[\d,\s]+\]/g, '');
           if (!streamStarted) {
             streamStarted = true;
             const idx = state.messages.findIndex(m => m.id === thinkingId);
             if (idx !== -1) {
               state.messages[idx].status = 'streaming';
-              state.messages[idx].content = streamedText;
+              state.messages[idx].content = displayText;
             }
             render();
           }
           // DOM 직접 업데이트 (성능 최적화)
           const msgBubble = document.querySelector(`[data-msg-id="${thinkingId}"] .markdown-content`);
           if (msgBubble) {
-            msgBubble.innerHTML = renderMarkdown(deduplicateRefs(streamedText));
+            msgBubble.innerHTML = renderMarkdown(deduplicateRefs(displayText));
             scrollToBottom();
           } else {
             const idx = state.messages.findIndex(m => m.id === thinkingId);
-            if (idx !== -1) state.messages[idx].content = streamedText;
+            if (idx !== -1) state.messages[idx].content = displayText;
             render();
           }
         };
 
         const onStatus = (statusMsg) => {
-          const statusEl = document.querySelector(`[data-msg-id="${thinkingId}"] .thinking-status`);
+          const statusEl = document.querySelector(`[data-msg-id="${thinkingId}"] .thinking-status-text`);
           if (statusEl) statusEl.textContent = statusMsg;
         };
 
+        // 검증 후 답변 변경 시 스트리밍 텍스트 초기화
+        const onReplace = () => {
+          streamedText = '';
+          streamStarted = false;
+          const idx = state.messages.findIndex(m => m.id === thinkingId);
+          if (idx !== -1) {
+            state.messages[idx].content = '';
+            state.messages[idx].status = 'streaming';
+          }
+          render();
+        };
+
         const response = await callAPIStream(
-          state.currentHotel.id, message, history, onToken, onStatus
+          state.currentHotel.id, message, history, onToken, onStatus, onReplace
         );
 
         const elapsedTime = stopThinkingTimer();
@@ -736,7 +779,7 @@
         if (idx !== -1) {
           const finalAnswer = response.needsClarification
             ? response.answer
-            : (streamedText || response.answer || '응답을 생성할 수 없습니다.');
+            : (response.answer || streamedText || '응답을 생성할 수 없습니다.');
 
           state.messages[idx] = {
             ...state.messages[idx],
@@ -750,11 +793,12 @@
             originalQuery: response.originalQuery || null
           };
 
-          // TTS 자동 재생
-          const sttActive = typeof STTEngine !== 'undefined' && STTEngine.getState() === 'listening';
-          if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable()
-              && finalAnswer && !response.needsClarification && !sttActive) {
-            TTSEngine.play(finalAnswer, thinkingId);
+          // Web Speech API 자동 재생 (명확화 아닌 일반 답변만)
+          if (!response.needsClarification && finalAnswer) {
+            const sttActive = typeof STTEngine !== 'undefined' && STTEngine.getState() === 'listening';
+            if (typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable() && !sttActive) {
+              TTSEngine.play(finalAnswer, thinkingId);
+            }
           }
         }
 
@@ -961,6 +1005,7 @@
 
     // ========== 초기화 ==========
     initTheme();
+    if (typeof TTSEngine !== 'undefined') TTSEngine.init();
     render();
   </script>
 </body>
