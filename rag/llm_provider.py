@@ -17,6 +17,7 @@ from typing import Optional, Callable
 # Groq 사용 여부 (환경변수로 제어)
 USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # Ollama timeout (초)
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
@@ -233,7 +234,7 @@ def _callGroq(prompt: str, system: str, temperature: float, maxTokens: int = 512
     messages.append({"role": "user", "content": prompt})
 
     data = {
-        "model": "llama-3.1-8b-instant",
+        "model": GROQ_MODEL,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": maxTokens
@@ -261,7 +262,7 @@ def checkLLMAvailable() -> tuple[bool, str]:
         (사용 가능 여부, 사용 중인 provider 이름)
     """
     if USE_GROQ and GROQ_API_KEY:
-        return True, "Groq API (llama-3.1-8b)"
+        return True, f"Groq API ({GROQ_MODEL})"
 
     try:
         import ollama
