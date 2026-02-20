@@ -23,6 +23,7 @@ LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
 LLM_MAX_RETRIES = 2
 
 # Ollama 성능 최적화 설정
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "exaone3.5:7.8b")  # LG EXAONE 3.5 한국어 최적화 모델
 OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "4096"))  # 기본 32768 → 4096 (KV 캐시 1/8)
 OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "60m")  # 60분 메모리 상주 (기본 5분)
 OLLAMA_NUM_THREAD = int(os.getenv("OLLAMA_NUM_THREAD", "8"))  # CPU 스레드 수 (M5 10코어)
@@ -165,7 +166,7 @@ def _callOllama(prompt: str, system: str, temperature: float, maxTokens: int = 5
     messages.append({"role": "user", "content": prompt})
 
     response = ollama.chat(
-        model="qwen2.5:7b",
+        model=OLLAMA_MODEL,
         messages=messages,
         options={
             "temperature": temperature,
@@ -194,7 +195,7 @@ def _callOllamaStream(prompt: str, system: str, temperature: float,
     messages.append({"role": "user", "content": prompt})
 
     response = ollama.chat(
-        model="qwen2.5:7b",
+        model=OLLAMA_MODEL,
         messages=messages,
         options={
             "temperature": temperature,
@@ -265,7 +266,7 @@ def checkLLMAvailable() -> tuple[bool, str]:
     try:
         import ollama
         ollama.list()
-        return True, "Ollama (qwen2.5:7b)"
+        return True, f"Ollama ({OLLAMA_MODEL})"
     except Exception:
         return False, "None"
 

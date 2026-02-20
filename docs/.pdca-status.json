@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-19T13:47:10.641Z",
+  "lastUpdated": "2026-02-20T04:26:21.295Z",
   "activeFeatures": [
     "rag",
     "tests",
@@ -24,9 +24,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-05T03:31:29.885Z",
-        "lastUpdated": "2026-02-19T13:47:10.641Z"
+        "lastUpdated": "2026-02-20T02:45:21.493Z"
       },
-      "lastFile": "/Users/Dev/josun_chatbot/rag/nodes_preprocess.py"
+      "lastFile": "/Users/Dev/josun_chatbot/rag/server.py"
     },
     "tests": {
       "phase": "do",
@@ -37,9 +37,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-05T03:32:43.319Z",
-        "lastUpdated": "2026-02-18T13:10:14.782Z"
+        "lastUpdated": "2026-02-19T22:45:31.645Z"
       },
-      "lastFile": "/Users/Dev/josun_chatbot/tests/evaluate.py"
+      "lastFile": "/Users/Dev/josun_chatbot/tests/test_multiturn.py"
     },
     "pipeline": {
       "phase": "do",
@@ -128,7 +128,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-09T04:57:03.324Z",
-        "lastUpdated": "2026-02-19T10:36:09.666Z"
+        "lastUpdated": "2026-02-20T04:26:21.295Z"
       },
       "lastFile": "/Users/Dev/josun_chatbot/ui/js/tts/ttsEngine.js"
     },
@@ -154,7 +154,7 @@
   "session": {
     "startedAt": "2026-02-05T02:34:37.244Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-19T13:47:10.641Z"
+    "lastActivity": "2026-02-20T04:26:21.295Z"
   },
   "history": [
     {
@@ -3370,6 +3370,90 @@
     {
       "timestamp": "2026-02-19T13:47:10.641Z",
       "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:06:02.330Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:07:47.238Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:07:51.530Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:17:30.521Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:29:25.667Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:45:21.872Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-19T22:45:31.645Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T01:42:36.116Z",
+      "feature": "tts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T01:42:47.607Z",
+      "feature": "tts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T01:42:57.776Z",
+      "feature": "tts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T02:45:06.987Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T02:45:21.493Z",
+      "feature": "rag",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T02:46:55.788Z",
+      "feature": "tts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-20T04:26:21.295Z",
+      "feature": "tts",
       "phase": "do",
       "action": "updated"
     }

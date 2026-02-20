@@ -1,5 +1,37 @@
 [
   {
+    "hotel": "josun_palace",
+    "hotel_name": "조선 팰리스",
+    "category": "다이닝",
+    "page_type": "dining",
+    "url": "https://jpg.josunhotel.com/dining/subMain.do",
+    "text": "조선 팰리스 레스토랑 안내\n\nQ: 조선 팰리스 다이닝(레스토랑) 종류를 알려주세요\nA: 조선 팰리스에는 다음과 같은 다이닝 시설이 있습니다:\n\n1. 콘스탄스(Constans) - 뷔페 레스토랑\n   위치: 1층 | 문의: 02-727-7600\n   200여 가지 프리미엄 세미 뷔페\n\n2. 1914 Lounge & Bar - 라운지 바\n   위치: 1층 | 문의: 02-727-7604\n   시그니처 칵테일과 애프터눈 티 세트\n\n3. 이타닉 가든(Itanic Garden) - 한식 파인다이닝\n   위치: 36층 | 문의: 02-727-7610\n   한국 식문화를 재해석한 파인다이닝\n\n4. 더 그레이트 홍연(The Great Hong Yeon) - 중식\n   위치: 36층 | 문의: 02-727-7610\n   광둥식 중식 레스토랑\n\n5. 조선델리 더 부티크(Josun Deli The Boutique) - 파티세리\n   위치: 1층 | 문의: 02-727-7620\n   조선호텔 시그니처 베이커리 & 파티세리"
+  },
+  {
+    "hotel": "grand_josun_busan",
+    "hotel_name": "그랜드 조선 부산",
+    "category": "다이닝",
+    "page_type": "dining",
+    "url": "https://gjb.josunhotel.com/dining/subMain.do",
+    "text": "그랜드 조선 부산 레스토랑 안내\n\nQ: 그랜드 조선 부산 다이닝(레스토랑) 종류를 알려주세요\nA: 그랜드 조선 부산에는 다음과 같은 다이닝 시설이 있습니다:\n\n1. 아리아(Aria) - 뷔페 레스토랑\n   위치: 2층 | 문의: 051-922-5100\n   프리미엄 뷔페 레스토랑\n\n2. Palais de Chine - 중식 레스토랑\n   위치: 35층 | 문의: 051-922-5160\n   해운대 오션뷰와 함께하는 프리미엄 중식\n\n3. 테라스 292(Lounge & Bar Terrace 292) - 라운지 바\n   위치: 35층 | 문의: 051-922-5200\n   해운대 전경을 감상할 수 있는 시그니처 바\n\n4. 조선 델리(Josun Deli) - 파티세리\n   위치: 1층 | 문의: 051-922-5120\n   스위트 기프트 & 파티세리"
+  },
+  {
+    "hotel": "grand_josun_jeju",
+    "hotel_name": "그랜드 조선 제주",
+    "category": "다이닝",
+    "page_type": "dining",
+    "url": "https://gjj.josunhotel.com/dining/subMain.do",
+    "text": "그랜드 조선 제주 레스토랑 안내\n\nQ: 그랜드 조선 제주 다이닝(레스토랑) 종류를 알려주세요\nA: 그랜드 조선 제주에는 다음과 같은 다이닝 시설이 있습니다:\n\n1. 아리아(Aria) - 뷔페 레스토랑\n   위치: 본관 1층 | 문의: 064-735-8989\n   130여 가지 다양한 메뉴의 뷔페, 오름정원 전망\n\n2. 라운지바(Lounge Bar)\n   위치: 본관 1층 | 문의: 064-735-8992\n   이국적인 분위기의 라운지 바\n\n3. 피크포인트(Peak.) - 루프탑 레스토랑\n   위치: 본관 루프탑 R층 | 문의: 064-735-8996\n   탁 트인 루프탑 인피니티 풀과 함께하는 다이닝\n\n4. 조선델리(Josun Deli) - 파티세리\n   위치: 본관 1층 | 문의: 064-735-8992\n   스위트 기프트 & 파티세리\n\n5. 잇투오(Eat2O) - 풀사이드 카페\n   위치: 본관 1층 | 문의: 064-735-8993\n   수영장과 야자수 아래의 카페\n\n6. 그랑 제이(Gran J) - 고메 라운지\n   위치: 힐 스위트관(신관) 1층 | 문의: 064-735-8980\n   힐 스위트 투숙객 전용 고메 라운지\n\n7. 헤븐리 라운지(Heavenly Lounge)\n   위치: 힐 스위트관(신관) 6층 | 문의: 064-735-8981\n   힐 스위트 투숙객 전용 라운지"
+  },
+  {
+    "hotel": "lescape",
+    "hotel_name": "레스케이프",
+    "category": "다이닝",
+    "page_type": "dining",
+    "url": "https://les.josunhotel.com/dining/subMain.do",
+    "text": "레스케이프 레스토랑 안내\n\nQ: 레스케이프 다이닝(레스토랑) 종류를 알려주세요\nA: 레스케이프에는 다음과 같은 다이닝 시설이 있습니다:\n\n1. 라망 시크레(L'Amant Secret) - 프렌치 레스토랑\n   위치: 7층 | 문의: 02-317-4090\n   프렌치 스타일의 파인다이닝\n\n2. 팔레드 신(Palais de Chine) - 중식 레스토랑\n   위치: 7층 | 문의: 02-317-4060\n   프리미엄 광둥식 중식\n\n3. 마크 다모르(Marque d'Amour) - 라운지 바\n   위치: 7층 | 문의: 02-317-4080\n   시그니처 칵테일과 프리미엄 주류\n\n4. 티 살롱 바이 팔레드 신(Tea Salon by Palais de Chine) - 티 라운지\n   위치: 1층 | 문의: 02-317-4074\n   프리미엄 차와 디저트"
+  },
+  {
     "hotel": "gravity_pangyo",
     "hotel_name": "그래비티 판교",
     "category": "다이닝",

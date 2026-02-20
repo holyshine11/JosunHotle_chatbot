@@ -28,6 +28,19 @@ const TTSPreprocessor = {
     [/\bpool\b/gi, '풀'],
     [/\bfitness\b/gi, '피트니스'],
     [/\bvalet\b/gi, '발렛'],
+    [/\bjacuzzi\b/gi, '자쿠지'],
+    [/\bpenthouse\b/gi, '펜트하우스'],
+    [/\btwin\b/gi, '트윈'],
+    [/\bdouble\b/gi, '더블'],
+    [/\bking\b/gi, '킹'],
+    [/\bqueen\b/gi, '퀸'],
+    [/\bboutique\b/gi, '부티크'],
+    [/\brooftop\b/gi, '루프탑'],
+    [/\bgrand\b/gi, '그랜드'],
+    [/\bterrace\b/gi, '테라스'],
+    [/\bbistro\b/gi, '비스트로'],
+    [/\bbar\b/gi, '바'],
+    [/\bcabin\b/gi, '캐빈'],
   ],
 
   // 한국어 숫자 읽기 매핑
@@ -79,12 +92,15 @@ const TTSPreprocessor = {
     // 8. 특수 기호 정리
     result = result.replace(/[|─═┌┐└┘├┤┬┴┼]/g, '');
     result = result.replace(/[><]/g, '');
+    result = result.replace(/[■●▶]/g, '');       // 블릿 기호 제거
+    result = result.replace(/※\s*/g, '참고, ');   // ※ → "참고,"
 
-    // 9. 연속 공백/줄바꿈 정리
-    result = result.replace(/\n{2,}/g, '. ');
-    result = result.replace(/\n/g, '. ');
+    // 9. 연속 공백/줄바꿈 정리 (차등 쉼)
+    result = result.replace(/\n{2,}/g, '. ');     // 문단 구분 → 긴 쉼
+    result = result.replace(/\n/g, ', ');          // 목록/줄바꿈 → 짧은 쉼
     result = result.replace(/\s{2,}/g, ' ');
     result = result.replace(/\.\s*\./g, '.');
+    result = result.replace(/,\s*,/g, ',');
 
     return result.trim();
   },

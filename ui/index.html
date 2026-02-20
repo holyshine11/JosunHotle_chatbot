@@ -10,7 +10,7 @@
   <!-- Pretendard 폰트 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <!-- 스타일시트 -->
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <!-- TTS 모듈 -->
   <script src="js/tts/textPreprocessor.js"></script>
   <script src="js/tts/ttsEngine.js"></script>
@@ -128,6 +128,7 @@
       messages: [],
       isSending: false,
       showHotelDropdown: false,
+      showTtsSettings: false,
       theme: localStorage.getItem('theme') || 'light',
       sessionId: null  // 세션 ID (서버에서 발급)
     };
@@ -329,6 +330,20 @@
               </svg>
             </button>
 
+            <!-- TTS 설정 버튼 -->
+            ${typeof TTSEngine !== 'undefined' && TTSEngine.isAvailable() ? `
+            <div class="relative" id="tts-settings-wrap">
+              <button data-action="toggle-tts-settings" class="tts-gear-btn" title="TTS 설정">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span class="hidden sm:inline">TTS</span>
+              </button>
+              ${state.showTtsSettings ? renderTtsSettingsPanel() : ''}
+            </div>
+            ` : ''}
+
             <!-- 테마 토글 버튼 -->
             <button data-action="toggle-theme"
               class="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all duration-200
@@ -418,6 +433,60 @@
       }
 
       scrollToBottom();
+    }
+
+    function renderTtsSettingsPanel() {
+      const mode = TTSEngine.getMode();
+      const voices = TTSEngine.getAvailableVoices();
+      const currentVoice = TTSEngine.getCurrentVoiceName();
+      const settings = TTSEngine.getSettings();
+
+      const voiceOptions = voices.map(v => {
+        const star = v.score >= 40 ? ' ★' : v.score >= 30 ? ' ☆' : '';
+        const label = v.label || v.name;
+        const selected = v.name === currentVoice ? 'selected' : '';
+        return `<option value="${v.name}" ${selected}>${label}${star}</option>`;
+      }).join('');
+
+      return `
+        <div class="tts-settings-panel" id="tts-settings-panel">
+          <div class="tts-mode-toggle">
+            <button data-action="tts-set-mode" data-tts-mode="edge"
+              class="tts-mode-btn ${mode === 'edge' ? 'tts-mode-active' : ''}">Edge TTS</button>
+            <button data-action="tts-set-mode" data-tts-mode="browser"
+              class="tts-mode-btn ${mode === 'browser' ? 'tts-mode-active' : ''}">브라우저</button>
+          </div>
+          <div class="tts-setting-group">
+            <div class="tts-setting-label">음성 선택</div>
+            <select data-tts-control="voice">${voiceOptions}</select>
+          </div>
+          <div class="tts-setting-group">
+            <div class="tts-setting-label">
+              <span>속도</span>
+              <span class="tts-setting-value" id="tts-rate-val">${settings.rate.toFixed(2)}</span>
+            </div>
+            <input type="range" data-tts-control="rate" min="0.5" max="1.5" step="0.05" value="${settings.rate}">
+          </div>
+          <div class="tts-setting-group">
+            <div class="tts-setting-label">
+              <span>음높이</span>
+              <span class="tts-setting-value" id="tts-pitch-val">${settings.pitch.toFixed(2)}</span>
+            </div>
+            <input type="range" data-tts-control="pitch" min="0.5" max="1.5" step="0.05" value="${settings.pitch}">
+          </div>
+          <div class="tts-setting-group">
+            <div class="tts-setting-label">
+              <span>문장 간 쉼</span>
+              <span class="tts-setting-value" id="tts-pause-val">${settings.pauseBetween}ms</span>
+            </div>
+            <input type="range" data-tts-control="pauseBetween" min="0" max="500" step="50" value="${settings.pauseBetween}">
+          </div>
+          <div class="tts-settings-actions">
+            <button data-action="tts-preview" class="tts-btn-preview">미리듣기</button>
+            <button data-action="tts-reset" class="tts-btn-reset">초기화</button>
+          </div>
+        </div>
+      `;
     }
 
     function renderEmptyState(h) {
@@ -861,10 +930,16 @@
       const target = e.target.closest('[data-action]');
       if (!target) {
         // 드롭다운 외부 클릭 시 닫기
+        let changed = false;
         if (state.showHotelDropdown && !e.target.closest('#dropdown')) {
           state.showHotelDropdown = false;
-          render();
+          changed = true;
         }
+        if (state.showTtsSettings && !e.target.closest('#tts-settings-wrap')) {
+          state.showTtsSettings = false;
+          changed = true;
+        }
+        if (changed) render();
         return;
       }
 
@@ -873,6 +948,7 @@
       switch (action) {
         case 'toggle-dropdown':
           state.showHotelDropdown = !state.showHotelDropdown;
+          state.showTtsSettings = false;
           render();
           break;
 
@@ -942,6 +1018,44 @@
           break;
         }
 
+        case 'toggle-tts-settings':
+          state.showTtsSettings = !state.showTtsSettings;
+          state.showHotelDropdown = false;
+          render();
+          break;
+
+        case 'tts-preview': {
+          const previewText = '안녕하세요, 조선호텔 AI 상담사 Jony입니다. 무엇을 도와드릴까요?';
+          TTSEngine.play(previewText, -1);
+          break;
+        }
+
+        case 'tts-set-mode': {
+          const newMode = target.dataset.ttsMode;
+          if (newMode) {
+            TTSEngine.setMode(newMode);
+            render();
+          }
+          break;
+        }
+
+        case 'tts-reset': {
+          TTSEngine.updateSettings({ ...TTSEngine._defaults });
+          // edge 모드로 복원
+          TTSEngine.setMode('edge');
+          TTSEngine._edgeAvailable = true;
+          // 음성도 기본값으로 복원
+          TTSEngine.setVoice('ko-KR-SunHiNeural');
+          const voices = TTSEngine.getAvailableVoices();
+          if (voices.length > 0) {
+            TTSEngine.setVoice(voices[0].name);
+          }
+          localStorage.removeItem('tts_voiceName');
+          localStorage.removeItem('tts_edgeVoiceName');
+          render();
+          break;
+        }
+
         case 'clarification-option':
           const selectedOption = target.dataset.option;
           if (selectedOption && state.currentHotel && !state.isSending) {
@@ -977,6 +1091,32 @@
             }
           }
           break;
+      }
+    });
+
+    // ========== TTS 설정 패널 input 이벤트 위임 ==========
+    document.getElementById('app').addEventListener('input', (e) => {
+      const control = e.target.dataset.ttsControl;
+      if (!control) return;
+
+      if (control === 'voice') {
+        TTSEngine.setVoice(e.target.value);
+        return;
+      }
+
+      const val = parseFloat(e.target.value);
+      TTSEngine.updateSettings({ [control]: val });
+
+      // 값 표시 업데이트
+      if (control === 'rate') {
+        const el = document.getElementById('tts-rate-val');
+        if (el) el.textContent = val.toFixed(2);
+      } else if (control === 'pitch') {
+        const el = document.getElementById('tts-pitch-val');
+        if (el) el.textContent = val.toFixed(2);
+      } else if (control === 'pauseBetween') {
+        const el = document.getElementById('tts-pause-val');
+        if (el) el.textContent = val + 'ms';
       }
     });
 

@@ -131,7 +131,7 @@ SCENARIOS = [
             {
                 "query": "피트니스는 몇시에 문을 열어?",
                 "expectClarification": False,
-                "expectKeywords": ["시"],
+                "expectKeywords": ["06", "6시", "시"],
                 "forbiddenKeywords": [],
                 "expectContext": "fitness",
             },

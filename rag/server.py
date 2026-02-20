@@ -19,7 +19,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi import FastAPI, HTTPException
+import re as _re
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -351,10 +353,45 @@ async def chat(request: ChatRequest):
 
 
 
-# ========== TTS ==========
-# TTS는 브라우저 Web Speech API로 전환 (서버 측 Edge TTS 제거)
-# - 서버 부하 0, 즉시 재생, 오프라인 동작
-# - Edge TTS 8~9초 지연 + 네트워크 실패 문제 해결
+# ========== TTS (Edge TTS 문장 단위 스트리밍) ==========
+# 허용 음성 화이트리스트 (ko-KR Neural)
+EDGE_TTS_VOICES = {
+    "ko-KR-SunHiNeural", "ko-KR-InJoonNeural",
+    "ko-KR-BongJinNeural", "ko-KR-GookMinNeural",
+    "ko-KR-JiMinNeural", "ko-KR-SeoHyeonNeural",
+    "ko-KR-SoonBokNeural", "ko-KR-YuJinNeural",
+}
+# rate/pitch 형식 검증 (예: "+0%", "-30%", "+20Hz")
+_RATE_PITCH_RE = _re.compile(r'^[+-]\d{1,3}(%|Hz)$')
+
+
+@app.get("/tts")
+async def tts(
+    text: str = Query(..., max_length=500),
+    voice: str = Query("ko-KR-SunHiNeural"),
+    rate: str = Query("+0%"),
+    pitch: str = Query("+0Hz"),
+):
+    """Edge TTS 문장 단위 음성 합성 (audio/mpeg 스트리밍)"""
+    if voice not in EDGE_TTS_VOICES:
+        raise HTTPException(400, "허용되지 않는 음성입니다.")
+    if not _RATE_PITCH_RE.match(rate) or not _RATE_PITCH_RE.match(pitch):
+        raise HTTPException(400, "rate/pitch 형식이 올바르지 않습니다.")
+
+    import edge_tts
+
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+
+    async def audioStream():
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                yield chunk["data"]
+
+    return StreamingResponse(
+        audioStream(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # 정적 파일 제공 (UI)

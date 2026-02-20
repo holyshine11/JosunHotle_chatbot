@@ -103,8 +103,8 @@ class AnswerVerifier:
     )
     # 종결어미 패턴 (문장 완결성 검사용)
     _RE_SENTENCE_ENDINGS = re.compile(r'(다|요|죠|세요|습니다|입니다|됩니다|합니다|드립니다|주세요|됩니까|바랍니다|까요)[.!?\s]')
-    # 과도한 영문 대문자 블록
-    _RE_UPPERCASE_BLOCK = re.compile(r'[A-Z]{10,}')
+    # 과도한 영문 대문자 블록 (RESTAURANT=10, INFORMATION=11 등 호텔 도메인 단어 허용)
+    _RE_UPPERCASE_BLOCK = re.compile(r'[A-Z]{20,}')
 
     def __init__(self):
         self.knownNames = self._loadKnownNames()
