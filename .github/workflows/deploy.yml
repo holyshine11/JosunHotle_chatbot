@@ -1,0 +1,48 @@
+# ============================================================
+# GitHub Actions: main 브랜치 push → NCP 서버 자동 배포
+# 방식: SSH 접속 → deploy.sh 실행 (서버에서 빌드)
+# ============================================================
+
+name: Deploy to NCP
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'doc/**'
+      - 'tests/**'
+      - '.claude/**'
+
+# 동시 배포 방지
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.NCP_HOST }}
+          username: ${{ secrets.NCP_USER }}
+          key: ${{ secrets.NCP_SSH_KEY }}
+          port: ${{ secrets.NCP_SSH_PORT || 22 }}
+          timeout: 600s
+          script: |
+            echo "=== 배포 시작: $(date) ==="
+            /opt/josun_chatbot/deploy/deploy.sh
+            echo "=== 배포 완료: $(date) ==="
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::NCP 배포 실패! 서버 상태를 확인하세요."
+          # 슬랙 알림 (선택)
+          # curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+          #   -H 'Content-type: application/json' \
+          #   -d '{"text":"🚨 챗봇 배포 실패! 확인 필요."}'

@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+venv/
+.venv/
+env/
+
+# 중간 데이터 (인덱스/UI만 필요)
+data/raw/
+data/clean/
+data/chunks/
+data/logs/
+data/hash_store.json
+
+# 불필요 모듈
+crawler/
+tests/
+monitor/
+doc/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+# 배포 스크립트 (이미지에 불필요)
+deploy/
+.github/
+.claude/
+.env
+*.md
