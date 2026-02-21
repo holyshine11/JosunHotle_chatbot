@@ -15,6 +15,7 @@
 6. [데이터 관리](#6-데이터-관리)
 7. [레스토랑 엔티티 시스템](#7-레스토랑-엔티티-시스템)
 8. [문제 해결](#8-문제-해결)
+9. [NCP 서버 배포 가이드](#9-ncp-서버-배포-가이드)
 
 ---
 
@@ -428,6 +429,245 @@ git add . && git commit -m "메시지" && git push origin main
 | 그랜드 조선 제주 | `grand_josun_jeju` |
 | 레스케이프 | `lescape` |
 | 그래비티 판교 | `gravity_pangyo` |
+
+---
+
+## 9. NCP 서버 배포 가이드
+
+> 네이버 클라우드 플랫폼(NCP)에 Docker 기반으로 배포하는 방법
+
+### 9-0. 사전 준비
+
+| 항목 | 설명 |
+|------|------|
+| NCP 계정 | https://www.ncloud.com 회원가입 + 결제수단(카드) 등록 |
+| Groq API 키 | https://console.groq.com 에서 무료 발급 (gsk_로 시작) |
+| GitHub 리포 | https://github.com/holyshine11/JosunHotle_chatbot |
+
+### 9-1. NCP 인프라 생성 (콘솔에서)
+
+아래 순서대로 NCP 콘솔(https://console.ncloud.com)에서 생성합니다.
+
+#### 1) VPC 생성
+- **경로**: VPC > VPC Management > VPC 생성
+- **이름**: `josun-vpc`
+- **IP 대역**: `10.0.0.0/16`
+
+#### 2) Subnet 생성
+- **경로**: VPC > Subnet Management > Subnet 생성
+- **이름**: `josun-subnet`
+- **IP 대역**: `10.0.1.0/24`
+- **VPC**: josun-vpc 선택
+- **용도**: 일반
+- **인터넷 게이트웨이**: 연결
+
+#### 3) ACG (방화벽) 생성
+- **경로**: VPC > ACG > ACG 생성
+- **이름**: `josun-acg`
+- **VPC**: josun-vpc 선택
+
+**ACG 규칙 설정 (필수!):**
+
+| 방향 | 프로토콜 | 접근 소스 | 포트 |
+|------|----------|----------|------|
+| Inbound | TCP | 0.0.0.0/0 | 22 (SSH) |
+| Inbound | TCP | 0.0.0.0/0 | 80 (HTTP) |
+| Outbound | TCP | 0.0.0.0/0 | 1-65535 (전체) |
+
+> **주의**: ACG 규칙이 없으면 SSH 접속 불가 (연결 무한 대기)
+
+#### 4) 서버 생성
+- **경로**: Server > 서버 생성
+- **이미지**: Ubuntu 24.04
+- **서버 타입**: 권장 Compact (2vCPU/4GB RAM) — 아래 참고
+- **요금제**: 시간 요금제 (비용 절약)
+- **VPC/Subnet**: josun-vpc / josun-subnet
+- **ACG**: josun-acg
+- **인증키**: 새로 생성 → `.pem` 파일 안전한 곳에 저장
+
+#### 5) 공인 IP 신청
+- **경로**: Server > Public IP > 공인 IP 신청
+- 생성한 서버에 연결
+
+#### 서버 스펙 권장사항
+
+| 스펙 | RAM | 리랭커 | 검색 속도 | 월 비용(추정) |
+|------|-----|--------|----------|-------------|
+| Micro (1vCPU/1GB) | 1GB | 불가 (OOM) | 60초+ (Swap) | ~13,000원 |
+| **Compact (2vCPU/4GB)** | **4GB** | **가능** | **2~5초** | **~26,000원** |
+| Standard (2vCPU/8GB) | 8GB | 가능 | 1~3초 | ~52,000원 |
+
+> **Micro (1GB)는 비권장**: embedding 모델 + ChromaDB + BM25 만으로 메모리 부족.
+> Swap 사용 시 검색 69초 이상 소요. 실사용 불가.
+
+### 9-2. SSH 접속
+
+#### 관리자 비밀번호 확인
+1. NCP 콘솔 > Server > 서버 선택
+2. **"서버 관리 및 설정 변경"** > **"관리자 비밀번호 확인"**
+3. `.pem` 파일 업로드 → 비밀번호 표시
+
+#### SSH 접속
+```bash
+ssh root@<공인IP>
+# 비밀번호: NCP 콘솔에서 확인한 값
+```
+
+### 9-3. 서버 초기 설정
+
+SSH 접속 후 아래 명령어를 **한 줄씩** 실행합니다.
+
+#### 1) Swap 생성 (Compact 이상이면 선택사항)
+```bash
+fallocate -l 4G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+echo 'vm.swappiness=10' >> /etc/sysctl.conf
+sysctl -p
+free -h
+```
+→ Swap 4G가 보이면 성공
+
+#### 2) Docker 설치
+```bash
+curl -fsSL https://get.docker.com | sh
+docker --version
+```
+→ `Docker version XX.X.X` 출력되면 성공
+
+#### 3) 프로젝트 클론
+```bash
+git clone https://github.com/holyshine11/JosunHotle_chatbot.git /opt/josun_chatbot
+```
+
+#### 4) 환경변수 설정
+```bash
+cat > /opt/josun_chatbot/.env << 'EOF'
+USE_GROQ=true
+GROQ_API_KEY=gsk_여기에_본인_키_입력
+GROQ_MODEL=llama-3.1-8b-instant
+PORT=8000
+RERANKER_ENABLED=true
+EOF
+```
+
+> **중요**: `GROQ_API_KEY=` 뒤에 본인의 Groq API 키를 입력하세요.
+> **중요**: `=` 양쪽에 **공백 없이** 작성해야 Docker가 인식합니다.
+> **Micro 서버**: `RERANKER_ENABLED=false`로 변경 (메모리 부족)
+
+#### 5) Basic Auth 계정 생성
+```bash
+apt-get install -y apache2-utils
+htpasswd -cb /opt/josun_chatbot/deploy/.htpasswd admin 원하는비밀번호
+```
+
+#### 6) 비용 감시 cron 등록
+```bash
+chmod +x /opt/josun_chatbot/deploy/*.sh
+```
+```bash
+(crontab -l 2>/dev/null; echo "0 * * * * /opt/josun_chatbot/deploy/cost-guard.sh >> /var/log/cost-guard.log 2>&1") | crontab -
+```
+
+### 9-4. Docker 빌드 & 배포
+
+#### 첫 배포
+```bash
+cd /opt/josun_chatbot
+docker build -t josun_chatbot-app .
+docker compose up -d
+```
+
+> **빌드 시간**: Compact 5~10분, Micro 15~20분
+
+#### 서버 시작 확인
+```bash
+docker compose logs -f app
+```
+
+정상 시작 시 아래 순서로 로그 출력:
+```
+[Warm-up] 모델 사전 로딩 시작...
+[모델 로딩] intfloat/multilingual-e5-small...
+  -> 로딩 완료 (차원: 384)
+[BM25] 인덱스 로드 완료 (754개 문서)
+[서버] RAG 그래프 초기화 완료
+[Warm-up] 리랭커 로딩 완료           ← RERANKER_ENABLED=true인 경우
+INFO:     Uvicorn running on 0.0.0.0:8000   ← 이 메시지가 나오면 완료!
+```
+
+`Ctrl+C`로 로그 종료 후 브라우저 접속:
+```
+http://<공인IP>
+```
+→ Basic Auth 로그인 (admin / 설정한 비밀번호)
+
+### 9-5. 운영 명령어
+
+```bash
+cd /opt/josun_chatbot
+
+# 실시간 로그
+./deploy/ops.sh logs
+
+# 서비스 상태 + 헬스체크 + 리소스 사용량
+./deploy/ops.sh status
+
+# 컨테이너 재시작 (코드 변경 없이)
+./deploy/ops.sh restart
+
+# 배포 버전 확인
+./deploy/ops.sh version
+
+# 서비스 중지 (비용 절약)
+./deploy/ops.sh stop
+```
+
+### 9-6. 코드 업데이트 (재배포)
+
+로컬에서 코드 수정 → push 후, 서버에서:
+```bash
+cd /opt/josun_chatbot
+git pull origin main
+docker build -t josun_chatbot-app .
+docker compose up -d
+```
+
+또는 GitHub Actions 자동 배포 설정 시 push만 하면 자동 배포됩니다.
+
+### 9-7. GitHub Actions CI/CD 설정
+
+GitHub 리포지토리 > Settings > Secrets > Actions에 아래 값 등록:
+
+| Secret 이름 | 값 |
+|------------|-----|
+| `NCP_HOST` | 서버 공인 IP |
+| `NCP_USER` | `root` |
+| `NCP_SSH_KEY` | `.pem` 파일 내용 전체 (-----BEGIN 부터 END----- 까지) |
+| `NCP_SSH_PORT` | `22` |
+
+등록 후 `main` 브랜치에 push하면 자동 배포됩니다.
+
+### 9-8. 자주 발생하는 문제
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| SSH 접속 시 무한 대기 | ACG에 포트 22 규칙 없음 | NCP 콘솔에서 ACG Inbound 22번 포트 추가 |
+| `502 Bad Gateway` | 앱 컨테이너가 아직 시작 중 | `docker compose logs -f app`으로 시작 상태 확인, 3~5분 대기 |
+| 응답 생성 실패 (67초 초과) | 1GB RAM으로 검색 매우 느림 | 4GB 이상 서버로 업그레이드 |
+| `리랭커 모델 로딩` 후 서버 죽음 | 리랭커 (~1.1GB)가 OOM 유발 | `.env`에 `RERANKER_ENABLED=false` 추가 후 재시작 |
+| Docker build `DeadlineExceeded` | Docker 데몬 타임아웃 | `systemctl restart docker` 후 `docker build -t josun_chatbot-app .` |
+| `.env` 환경변수 미적용 | `=` 양쪽에 공백 있음 | `KEY=value` 형태로 공백 없이 작성 |
+| `RERANKER_ENABLED=false` 안 먹힘 | Docker 이미지 재빌드 안 함 | `docker build -t josun_chatbot-app .` → `docker compose up -d` |
+
+### 9-9. 비용 관리
+
+- `deploy/cost-guard.sh`: 매시간 가동 시간 추적, 예산 초과 시 자동 정지
+- 설정: `MAX_MONTHLY_WON=10000` (기본 1만원, 필요 시 수정)
+- 수동 정지: `./deploy/ops.sh stop`
+- NCP 콘솔에서 서버 자체를 "정지"하면 서버 요금도 절약 (공인 IP 비용은 유지)
 
 ---
 
