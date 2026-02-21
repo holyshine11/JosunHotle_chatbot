@@ -430,7 +430,7 @@ const TTSEngine = {
       pitch: this._toEdgePitch(this._settings.pitch),
     });
 
-    const baseUrl = (window.location.port !== '8000')
+    const baseUrl = (window.location.hostname === 'localhost' && window.location.port !== '8000')
       ? 'http://localhost:8000'
       : '';
 
