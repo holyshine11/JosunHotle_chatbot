@@ -2,6 +2,7 @@
 
 RAGGraph에서 사용하는 키워드, 매핑, 임계값 등 모든 상수를 정의.
 """
+import os
 
 # 근거 검증 임계값 (높을수록 엄격)
 EVIDENCE_THRESHOLD = 0.65  # evidenceGateNode: 검색 결과 최소 품질
@@ -27,7 +28,7 @@ SUSPICIOUS_PATTERNS = [
 ]
 
 # 리랭커 설정
-RERANKER_ENABLED = True  # Cross-Encoder 리랭커 사용 여부
+RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "true").lower() == "true"
 
 # 질문 유효성 검사용 키워드 (호텔 관련 질문인지 판단)
 VALID_QUERY_KEYWORDS = [

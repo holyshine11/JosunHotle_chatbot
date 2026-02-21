@@ -51,14 +51,18 @@ async def warmup():
     # 1. RAG 그래프 초기화 (Embedding 모델 + Chroma + BM25)
     getRagGraph()
 
-    # 2. 리랭커 모델 사전 로딩
-    try:
-        from rag.reranker import getReranker
-        reranker = getReranker()
-        reranker._loadModel()
-        print(f"[Warm-up] 리랭커 로딩 완료")
-    except Exception as e:
-        print(f"[Warm-up] 리랭커 로딩 실패: {e}")
+    # 2. 리랭커 모델 사전 로딩 (RERANKER_ENABLED=false면 스킵)
+    from rag.constants import RERANKER_ENABLED
+    if RERANKER_ENABLED:
+        try:
+            from rag.reranker import getReranker
+            reranker = getReranker()
+            reranker._loadModel()
+            print(f"[Warm-up] 리랭커 로딩 완료")
+        except Exception as e:
+            print(f"[Warm-up] 리랭커 로딩 실패: {e}")
+    else:
+        print(f"[Warm-up] 리랭커 비활성화 (RERANKER_ENABLED=false)")
 
     # 3. Ollama LLM 모델 warm-up (keep_alive=-1로 메모리 상주)
     try:
